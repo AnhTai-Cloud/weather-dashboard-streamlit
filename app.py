@@ -14,28 +14,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Dòng test để biết app đã render
-
 
 # =========================
-# CSS GIAO DIỆN
+# CSS GIAO DIỆN + WEATHER ICONS
 # =========================
 st.markdown("""
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
-
 <style>
+@import url("https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css");
+
 .stApp {
     background-color: #f5f6fa;
-}
-
-.weather-icon-main {
-    font-size: 78px;
-    color: #f6a623;
-}
-
-.weather-icon-day {
-    font-size: 34px;
-    color: #f6a623;
 }
 
 .weather-card {
@@ -105,11 +93,29 @@ st.markdown("""
     font-size: 14px;
     margin-top: 8px;
 }
+
+.weather-icon-main {
+    font-size: 92px;
+    color: #f6a623;
+    min-width: 120px;
+    text-align: center;
+}
+
+.weather-icon-day {
+    font-size: 38px;
+    color: #f6a623;
+    margin: 12px 0;
+}
+
+.block-container {
+    padding-top: 2rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
+
 # =========================
-# HÀM ĐỔI WEATHER CODE
+# HÀM ĐỔI WEATHER CODE SANG TEXT + ICON CLASS
 # =========================
 def weather_code_to_text(code):
     codes = {
@@ -125,17 +131,27 @@ def weather_code_to_text(code):
         53: ("Moderate drizzle", "wi wi-sprinkle"),
         55: ("Dense drizzle", "wi wi-rain"),
 
+        56: ("Freezing drizzle", "wi wi-rain-mix"),
+        57: ("Freezing drizzle", "wi wi-rain-mix"),
+
         61: ("Slight rain", "wi wi-rain"),
         63: ("Moderate rain", "wi wi-rain"),
         65: ("Heavy rain", "wi wi-rain-wind"),
 
+        66: ("Freezing rain", "wi wi-rain-mix"),
+        67: ("Freezing rain", "wi wi-rain-mix"),
+
         71: ("Slight snow", "wi wi-snow"),
         73: ("Moderate snow", "wi wi-snow"),
         75: ("Heavy snow", "wi wi-snowflake-cold"),
+        77: ("Snow grains", "wi wi-snow"),
 
         80: ("Rain showers", "wi wi-showers"),
         81: ("Rain showers", "wi wi-showers"),
         82: ("Violent rain showers", "wi wi-storm-showers"),
+
+        85: ("Snow showers", "wi wi-snow"),
+        86: ("Snow showers", "wi wi-snow"),
 
         95: ("Thunderstorm", "wi wi-thunderstorm"),
         96: ("Thunderstorm with hail", "wi wi-thunderstorm"),
@@ -143,6 +159,7 @@ def weather_code_to_text(code):
     }
 
     return codes.get(int(code), ("Unknown", "wi wi-na"))
+
 
 def fahrenheit(c):
     return c * 9 / 5 + 32
@@ -165,7 +182,6 @@ def get_weather(lat, lon):
         "latitude": lat,
         "longitude": lon,
 
-        # SỬA Ở ĐÂY: dùng chuỗi, không dùng list
         "current": ",".join([
             "temperature_2m",
             "relative_humidity_2m",
@@ -292,7 +308,7 @@ next_24h = hourly.head(24)
 # =========================
 # HEADER
 # =========================
-st.markdown(f"## 🌤️ Weather Dashboard - {display_city}")
+st.markdown(f"## Weather Dashboard - {display_city}")
 st.caption(f"Cập nhật theo API: {current['time']} | Tọa độ: {lat}, {lon}")
 
 
@@ -307,8 +323,10 @@ with left:
         <div class="weather-title">{display_city}, Vietnam</div>
         <div class="weather-sub">Current weather</div>
         <br>
-        <div style="display:flex; align-items:center; gap:24px;">
-            <div style="font-size:78px;">{weather_icon}</div>
+        <div style="display:flex; align-items:center; gap:28px;">
+            <div class="weather-icon-main">
+                <i class="{weather_icon}"></i>
+            </div>
             <div>
                 <div class="big-temp">{temp_now:.0f}{unit}</div>
                 <div class="weather-title">{weather_text}</div>
@@ -331,7 +349,9 @@ with left:
             st.markdown(f"""
             <div class="day-card">
                 <div style="font-weight:700;">{date_label}</div>
-                <div style="font-size:34px;">{icon}</div>
+                <div class="weather-icon-day">
+                    <i class="{icon}"></i>
+                </div>
                 <div>{row["temperature_2m_max_show"]:.0f}{unit} / {row["temperature_2m_min_show"]:.0f}{unit}</div>
                 <div style="font-size:13px;color:#666;">Rain {row["precipitation_probability_max"]:.0f}%</div>
             </div>
