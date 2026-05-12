@@ -15,16 +15,27 @@ st.set_page_config(
 )
 
 # Dòng test để biết app đã render
-st.write("✅ App đã chạy")
 
 
 # =========================
 # CSS GIAO DIỆN
 # =========================
 st.markdown("""
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
+
 <style>
 .stApp {
     background-color: #f5f6fa;
+}
+
+.weather-icon-main {
+    font-size: 78px;
+    color: #f6a623;
+}
+
+.weather-icon-day {
+    font-size: 34px;
+    color: #f6a623;
 }
 
 .weather-card {
@@ -97,36 +108,41 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # =========================
 # HÀM ĐỔI WEATHER CODE
 # =========================
 def weather_code_to_text(code):
     codes = {
-        0: ("Clear sky", "☀️"),
-        1: ("Mainly clear", "🌤️"),
-        2: ("Partly cloudy", "⛅"),
-        3: ("Overcast", "☁️"),
-        45: ("Fog", "🌫️"),
-        48: ("Rime fog", "🌫️"),
-        51: ("Light drizzle", "🌦️"),
-        53: ("Moderate drizzle", "🌦️"),
-        55: ("Dense drizzle", "🌧️"),
-        61: ("Slight rain", "🌧️"),
-        63: ("Moderate rain", "🌧️"),
-        65: ("Heavy rain", "⛈️"),
-        71: ("Slight snow", "🌨️"),
-        73: ("Moderate snow", "🌨️"),
-        75: ("Heavy snow", "❄️"),
-        80: ("Rain showers", "🌦️"),
-        81: ("Rain showers", "🌧️"),
-        82: ("Violent rain showers", "⛈️"),
-        95: ("Thunderstorm", "⛈️"),
-        96: ("Thunderstorm with hail", "⛈️"),
-        99: ("Thunderstorm with hail", "⛈️")
-    }
-    return codes.get(int(code), ("Unknown", "❓"))
+        0: ("Clear sky", "wi wi-day-sunny"),
+        1: ("Mainly clear", "wi wi-day-sunny-overcast"),
+        2: ("Partly cloudy", "wi wi-day-cloudy"),
+        3: ("Overcast", "wi wi-cloudy"),
 
+        45: ("Fog", "wi wi-fog"),
+        48: ("Rime fog", "wi wi-fog"),
+
+        51: ("Light drizzle", "wi wi-sprinkle"),
+        53: ("Moderate drizzle", "wi wi-sprinkle"),
+        55: ("Dense drizzle", "wi wi-rain"),
+
+        61: ("Slight rain", "wi wi-rain"),
+        63: ("Moderate rain", "wi wi-rain"),
+        65: ("Heavy rain", "wi wi-rain-wind"),
+
+        71: ("Slight snow", "wi wi-snow"),
+        73: ("Moderate snow", "wi wi-snow"),
+        75: ("Heavy snow", "wi wi-snowflake-cold"),
+
+        80: ("Rain showers", "wi wi-showers"),
+        81: ("Rain showers", "wi wi-showers"),
+        82: ("Violent rain showers", "wi wi-storm-showers"),
+
+        95: ("Thunderstorm", "wi wi-thunderstorm"),
+        96: ("Thunderstorm with hail", "wi wi-thunderstorm"),
+        99: ("Thunderstorm with hail", "wi wi-thunderstorm")
+    }
+
+    return codes.get(int(code), ("Unknown", "wi wi-na"))
 
 def fahrenheit(c):
     return c * 9 / 5 + 32
