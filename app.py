@@ -2,10 +2,11 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
+import textwrap
 
 
 # =========================
-# CONFIG
+# PAGE CONFIG
 # =========================
 st.set_page_config(
     page_title="Weather Dashboard",
@@ -16,29 +17,38 @@ st.set_page_config(
 
 
 # =========================
-# WEATHER ICON CSS
+# SAFE HTML RENDER
+# =========================
+def render_html(html: str):
+    st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
+
+
+# =========================
+# LOAD ICON PACK
 # =========================
 st.markdown(
-    """
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
-    """,
+    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">',
     unsafe_allow_html=True
 )
 
-st.markdown("""
+
+# =========================
+# CSS
+# =========================
+render_html("""
 <style>
 :root {
     --bg: #eef0f3;
-    --card: #f2ece5;
-    --card-2: #f6f2ec;
+    --card: #f3eee8;
+    --card2: #f8f5f0;
     --text: #2f3341;
-    --muted: #757575;
-    --orange: #f2a12d;
-    --green: #45b36b;
-    --blue: #5d86ff;
-    --purple: #9a84ff;
-    --red: #ff8e52;
-    --line: #ddd6cf;
+    --muted: #74777f;
+    --orange: #f5a623;
+    --green: #43b36a;
+    --blue: #5b83ff;
+    --purple: #9a7dff;
+    --red: #ff7c4d;
+    --line: #ded8d1;
 }
 
 .stApp {
@@ -52,9 +62,13 @@ st.markdown("""
     padding-bottom: 2rem;
 }
 
+section[data-testid="stSidebar"] {
+    background: #e6e9ed;
+}
+
 .main-title {
-    font-size: 30px;
-    font-weight: 800;
+    font-size: 32px;
+    font-weight: 850;
     color: var(--text);
     margin-bottom: 6px;
 }
@@ -62,27 +76,20 @@ st.markdown("""
 .sub-title {
     color: var(--muted);
     font-size: 14px;
-    margin-bottom: 18px;
+    margin-bottom: 20px;
 }
 
 .hero-card {
     background: var(--card);
     border-radius: 28px;
-    padding: 24px 26px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.05);
-    margin-bottom: 20px;
-}
-
-.hero-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
+    padding: 26px 28px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.055);
+    margin-bottom: 18px;
 }
 
 .hero-place {
-    font-size: 18px;
-    font-weight: 800;
+    font-size: 19px;
+    font-weight: 850;
     color: var(--text);
 }
 
@@ -95,29 +102,29 @@ st.markdown("""
 .hero-main {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 26px;
     margin-top: 20px;
 }
 
 .hero-icon {
-    font-size: 86px;
+    font-size: 92px;
     color: var(--orange);
-    min-width: 95px;
+    min-width: 110px;
     text-align: center;
 }
 
 .hero-temp {
-    font-size: 64px;
-    font-weight: 800;
+    font-size: 68px;
+    font-weight: 850;
     line-height: 1;
     color: var(--text);
 }
 
 .hero-cond {
-    font-size: 22px;
-    font-weight: 800;
-    margin-top: 6px;
+    font-size: 23px;
+    font-weight: 850;
     color: var(--text);
+    margin-top: 6px;
 }
 
 .hero-feel {
@@ -137,7 +144,7 @@ st.markdown("""
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: #ffffff;
+    background: #fff;
     border-radius: 999px;
     padding: 8px 12px;
     font-size: 13px;
@@ -152,16 +159,16 @@ st.markdown("""
 
 .section-title {
     font-size: 24px;
-    font-weight: 800;
+    font-weight: 850;
     color: var(--text);
-    margin: 18px 0 14px 0;
+    margin: 22px 0 14px 0;
 }
 
 .metric-card {
     background: var(--card);
     border-radius: 24px;
     padding: 18px 20px;
-    min-height: 165px;
+    min-height: 166px;
     box-shadow: 0 8px 22px rgba(0,0,0,0.05);
     margin-bottom: 16px;
 }
@@ -170,12 +177,11 @@ st.markdown("""
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
 }
 
 .metric-title {
     font-size: 16px;
-    font-weight: 800;
+    font-weight: 850;
     color: var(--text);
 }
 
@@ -183,19 +189,19 @@ st.markdown("""
     width: 48px;
     height: 48px;
     border-radius: 16px;
-    background: rgba(255,255,255,0.75);
+    background: rgba(255,255,255,0.8);
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .metric-icon-box i {
-    font-size: 24px;
+    font-size: 25px;
 }
 
 .metric-value {
-    font-size: 30px;
-    font-weight: 800;
+    font-size: 31px;
+    font-weight: 850;
     color: var(--text);
     margin-top: 14px;
 }
@@ -220,18 +226,52 @@ st.markdown("""
     border-radius: 999px;
 }
 
+.hour-card {
+    background: #fff;
+    border-radius: 18px;
+    padding: 12px 8px;
+    min-height: 126px;
+    text-align: center;
+    box-shadow: 0 5px 14px rgba(0,0,0,0.045);
+    margin-bottom: 10px;
+}
+
+.hour-time {
+    font-size: 14px;
+    font-weight: 850;
+    color: var(--text);
+}
+
+.hour-icon {
+    font-size: 30px;
+    color: var(--orange);
+    margin: 10px 0 8px 0;
+}
+
+.hour-temp {
+    font-size: 18px;
+    font-weight: 850;
+    color: var(--text);
+}
+
+.hour-rain {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+}
+
 .daily-card {
     background: var(--card);
     border-radius: 18px;
-    padding: 14px 10px;
+    padding: 14px 8px;
     min-height: 170px;
     text-align: center;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.04);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.045);
 }
 
 .daily-day {
     font-size: 14px;
-    font-weight: 800;
+    font-weight: 850;
     color: var(--text);
 }
 
@@ -248,15 +288,14 @@ st.markdown("""
 }
 
 .daily-max {
-    font-size: 24px;
-    font-weight: 800;
+    font-size: 23px;
+    font-weight: 850;
     color: var(--text);
 }
 
 .daily-min {
     font-size: 14px;
     color: var(--muted);
-    margin-top: 2px;
 }
 
 .daily-rain {
@@ -264,51 +303,8 @@ st.markdown("""
     font-size: 13px;
     color: var(--muted);
 }
-
-.hour-card {
-    background: #ffffff;
-    border-radius: 18px;
-    padding: 12px 10px;
-    min-height: 126px;
-    text-align: center;
-    box-shadow: 0 5px 14px rgba(0,0,0,0.04);
-}
-
-.hour-time {
-    font-size: 14px;
-    font-weight: 800;
-    color: var(--text);
-}
-
-.hour-icon {
-    font-size: 30px;
-    color: var(--orange);
-    margin: 10px 0 8px 0;
-}
-
-.hour-temp {
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--text);
-}
-
-.hour-rain {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 4px;
-}
-
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background: #e7eaee;
-}
-
-section[data-testid="stSidebar"] .st-emotion-cache-16txtl3,
-section[data-testid="stSidebar"] .st-emotion-cache-1cypcdb {
-    color: var(--text);
-}
 </style>
-""", unsafe_allow_html=True)
+""")
 
 
 # =========================
@@ -327,14 +323,12 @@ def weather_code_to_text(code):
         51: ("Light drizzle", "wi wi-sprinkle"),
         53: ("Moderate drizzle", "wi wi-sprinkle"),
         55: ("Dense drizzle", "wi wi-rain"),
-
         56: ("Freezing drizzle", "wi wi-rain-mix"),
         57: ("Freezing drizzle", "wi wi-rain-mix"),
 
         61: ("Slight rain", "wi wi-rain"),
         63: ("Moderate rain", "wi wi-rain"),
         65: ("Heavy rain", "wi wi-rain-wind"),
-
         66: ("Freezing rain", "wi wi-rain-mix"),
         67: ("Freezing rain", "wi wi-rain-mix"),
 
@@ -372,21 +366,22 @@ def clamp(x, min_val=0, max_val=100):
 
 def metric_card(title, value, desc, icon_class, color, percent):
     percent = clamp(percent)
+
     return f"""
-    <div class="metric-card">
-        <div class="metric-head">
-            <div class="metric-title">{title}</div>
-            <div class="metric-icon-box">
-                <i class="{icon_class}" style="color:{color};"></i>
-            </div>
-        </div>
-        <div class="metric-value">{value}</div>
-        <div class="metric-desc">{desc}</div>
-        <div class="progress-wrap">
-            <div class="progress-fill" style="width:{percent}%; background:{color};"></div>
+<div class="metric-card">
+    <div class="metric-head">
+        <div class="metric-title">{title}</div>
+        <div class="metric-icon-box">
+            <i class="{icon_class}" style="color:{color};"></i>
         </div>
     </div>
-    """
+    <div class="metric-value">{value}</div>
+    <div class="metric-desc">{desc}</div>
+    <div class="progress-wrap">
+        <div class="progress-fill" style="width:{percent}%; background:{color};"></div>
+    </div>
+</div>
+"""
 
 
 # =========================
@@ -395,6 +390,7 @@ def metric_card(title, value, desc, icon_class, color, percent):
 @st.cache_data(ttl=1800)
 def get_weather(lat, lon):
     url = "https://api.open-meteo.com/v1/forecast"
+
     params = {
         "latitude": lat,
         "longitude": lon,
@@ -467,6 +463,7 @@ else:
     display_city = city
 
 unit = st.sidebar.radio("Đơn vị nhiệt độ", ["°C", "°F"])
+
 st.sidebar.markdown("---")
 st.sidebar.write("Dữ liệu lấy từ Open-Meteo API")
 
@@ -503,6 +500,7 @@ else:
     daily["temp_min_show"] = daily["temperature_2m_min"]
 
 weather_text, weather_icon = weather_code_to_text(current["weather_code"])
+
 next_12h = hourly.head(12)
 next_24h = hourly.head(24)
 
@@ -510,133 +508,139 @@ next_24h = hourly.head(24)
 # =========================
 # HEADER
 # =========================
-st.markdown(f'<div class="main-title">Weather Dashboard - {display_city}</div>', unsafe_allow_html=True)
-st.markdown(
-    f'<div class="sub-title">Cập nhật theo API: {current["time"]} | Tọa độ: {lat}, {lon}</div>',
-    unsafe_allow_html=True
-)
+render_html(f"""
+<div class="main-title">Weather Dashboard - {display_city}</div>
+<div class="sub-title">Cập nhật theo API: {current["time"]} | Tọa độ: {lat}, {lon}</div>
+""")
 
 
 # =========================
-# MAIN LAYOUT
+# LAYOUT
 # =========================
 left, right = st.columns([1.35, 1])
 
 with left:
     # HERO CARD
-    hero_html = f"""
-    <div class="hero-card">
-        <div class="hero-top">
-            <div>
-                <div class="hero-place">{display_city}, Vietnam</div>
-                <div class="hero-small">Current weather</div>
-            </div>
+    render_html(f"""
+<div class="hero-card">
+    <div class="hero-place">{display_city}, Vietnam</div>
+    <div class="hero-small">Current weather</div>
+
+    <div class="hero-main">
+        <div class="hero-icon">
+            <i class="{weather_icon}"></i>
         </div>
 
-        <div class="hero-main">
-            <div class="hero-icon">
-                <i class="{weather_icon}"></i>
-            </div>
+        <div>
+            <div class="hero-temp">{temp_now:.0f}{unit}</div>
+            <div class="hero-cond">{weather_text}</div>
+            <div class="hero-feel">Feels like {feels:.0f}{unit}</div>
 
-            <div>
-                <div class="hero-temp">{temp_now:.0f}{unit}</div>
-                <div class="hero-cond">{weather_text}</div>
-                <div class="hero-feel">Feels like {feels:.0f}{unit}</div>
+            <div class="badge-row">
+                <div class="info-badge">
+                    <i class="wi wi-humidity"></i>
+                    Humidity {current["relative_humidity_2m"]}%
+                </div>
 
-                <div class="badge-row">
-                    <div class="info-badge">
-                        <i class="wi wi-humidity"></i>
-                        Humidity {current['relative_humidity_2m']}%
-                    </div>
+                <div class="info-badge">
+                    <i class="wi wi-strong-wind"></i>
+                    Wind {current["wind_speed_10m"]:.0f} km/h
+                </div>
 
-                    <div class="info-badge">
-                        <i class="wi wi-strong-wind"></i>
-                        Wind {current['wind_speed_10m']:.0f} km/h
-                    </div>
+                <div class="info-badge">
+                    <i class="wi wi-raindrop"></i>
+                    Rain {current["rain"]:.1f} mm
+                </div>
 
-                    <div class="info-badge">
-                        <i class="wi wi-raindrop"></i>
-                        Rain {current['rain']:.1f} mm
-                    </div>
-
-                    <div class="info-badge">
-                        <i class="wi wi-cloudy"></i>
-                        Cloud {current['cloud_cover']}%
-                    </div>
+                <div class="info-badge">
+                    <i class="wi wi-cloudy"></i>
+                    Cloud {current["cloud_cover"]}%
                 </div>
             </div>
         </div>
     </div>
-    """
-    st.markdown(hero_html, unsafe_allow_html=True)
+</div>
+""")
 
-    # 12 HOURS
-    st.markdown('<div class="section-title">Dự báo 12 giờ tới</div>', unsafe_allow_html=True)
+    # HOURLY FORECAST
+    render_html('<div class="section-title">Dự báo 12 giờ tới</div>')
 
     row1 = st.columns(6)
-    for i, row in next_12h.iloc[:6].iterrows():
+    for i, row in next_12h.iloc[:6].reset_index(drop=True).iterrows():
         _, icon = weather_code_to_text(row["weather_code"])
         hour_label = row["time"].strftime("%H:%M")
+
         with row1[i]:
-            st.markdown(f"""
-            <div class="hour-card">
-                <div class="hour-time">{hour_label}</div>
-                <div class="hour-icon"><i class="{icon}"></i></div>
-                <div class="hour-temp">{row["temperature_show"]:.0f}{unit}</div>
-                <div class="hour-rain">Rain {row["precipitation_probability"]:.0f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
+            render_html(f"""
+<div class="hour-card">
+    <div class="hour-time">{hour_label}</div>
+    <div class="hour-icon"><i class="{icon}"></i></div>
+    <div class="hour-temp">{row["temperature_show"]:.0f}{unit}</div>
+    <div class="hour-rain">Rain {row["precipitation_probability"]:.0f}%</div>
+</div>
+""")
 
     row2 = st.columns(6)
-    for j, row in enumerate(next_12h.iloc[6:12].itertuples()):
-        _, icon = weather_code_to_text(row.weather_code)
-        hour_label = row.time.strftime("%H:%M")
-        with row2[j]:
-            st.markdown(f"""
-            <div class="hour-card">
-                <div class="hour-time">{hour_label}</div>
-                <div class="hour-icon"><i class="{icon}"></i></div>
-                <div class="hour-temp">{row.temperature_show:.0f}{unit}</div>
-                <div class="hour-rain">Rain {row.precipitation_probability:.0f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
+    for i, row in next_12h.iloc[6:12].reset_index(drop=True).iterrows():
+        _, icon = weather_code_to_text(row["weather_code"])
+        hour_label = row["time"].strftime("%H:%M")
 
-    # 7 DAYS
-    st.markdown('<div class="section-title">Dự báo 7 ngày</div>', unsafe_allow_html=True)
+        with row2[i]:
+            render_html(f"""
+<div class="hour-card">
+    <div class="hour-time">{hour_label}</div>
+    <div class="hour-icon"><i class="{icon}"></i></div>
+    <div class="hour-temp">{row["temperature_show"]:.0f}{unit}</div>
+    <div class="hour-rain">Rain {row["precipitation_probability"]:.0f}%</div>
+</div>
+""")
+
+    # DAILY FORECAST
+    render_html('<div class="section-title">Dự báo 7 ngày</div>')
 
     day_cols = st.columns(7)
-    for i, row in daily.iterrows():
+    for i, row in daily.reset_index(drop=True).iterrows():
         _, icon = weather_code_to_text(row["weather_code"])
         day_name = row["time"].strftime("%a")
         day_num = row["time"].strftime("%d")
-        with day_cols[i]:
-            st.markdown(f"""
-            <div class="daily-card">
-                <div class="daily-day">{day_name}</div>
-                <div class="daily-date">{day_num}</div>
-                <div class="daily-icon"><i class="{icon}"></i></div>
-                <div class="daily-max">{row["temp_max_show"]:.0f}{unit}</div>
-                <div class="daily-min">/ {row["temp_min_show"]:.0f}{unit}</div>
-                <div class="daily-rain"><i class="wi wi-raindrop"></i> {row["precipitation_probability_max"]:.0f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
 
-    # TEMPERATURE CHART
-    st.markdown('<div class="section-title">Biểu đồ nhiệt độ 24 giờ tới</div>', unsafe_allow_html=True)
+        with day_cols[i]:
+            render_html(f"""
+<div class="daily-card">
+    <div class="daily-day">{day_name}</div>
+    <div class="daily-date">{day_num}</div>
+    <div class="daily-icon"><i class="{icon}"></i></div>
+    <div class="daily-max">{row["temp_max_show"]:.0f}{unit}</div>
+    <div class="daily-min">/ {row["temp_min_show"]:.0f}{unit}</div>
+    <div class="daily-rain">
+        <i class="wi wi-raindrop"></i> {row["precipitation_probability_max"]:.0f}%
+    </div>
+</div>
+""")
+
+    # TEMP CHART
+    render_html('<div class="section-title">Biểu đồ nhiệt độ 24 giờ tới</div>')
+
     fig_temp = px.line(
         next_24h,
         x="time",
         y="temperature_show",
         markers=True,
-        labels={"time": "Thời gian", "temperature_show": f"Nhiệt độ {unit}"}
+        labels={
+            "time": "Thời gian",
+            "temperature_show": f"Nhiệt độ {unit}"
+        }
     )
+
     fig_temp.update_layout(
         height=320,
         margin=dict(l=10, r=10, t=20, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#f2ece5"
+        plot_bgcolor="#f3eee8"
     )
+
     st.plotly_chart(fig_temp, use_container_width=True)
+
 
 with right:
     visibility_km = hourly["visibility"].iloc[0] / 1000
@@ -649,96 +653,90 @@ with right:
     cloud = current["cloud_cover"]
 
     c1, c2 = st.columns(2)
+
     with c1:
-        st.markdown(
-            metric_card(
-                "Visibility",
-                f"{visibility_km:.1f} km",
-                "Tầm nhìn hiện tại",
-                "wi wi-fog",
-                "#46b96c",
-                visibility_km * 12
-            ),
-            unsafe_allow_html=True
-        )
+        render_html(metric_card(
+            "Visibility",
+            f"{visibility_km:.1f} km",
+            "Tầm nhìn hiện tại",
+            "wi wi-fog",
+            "#43b36a",
+            visibility_km * 12
+        ))
+
     with c2:
-        st.markdown(
-            metric_card(
-                "Wind",
-                f"{wind_speed:.0f} km/h",
-                f"Hướng {wind_dir} - Gust {gust:.0f} km/h",
-                "wi wi-strong-wind",
-                "#56c596",
-                wind_speed * 3
-            ),
-            unsafe_allow_html=True
-        )
+        render_html(metric_card(
+            "Wind",
+            f"{wind_speed:.0f} km/h",
+            f"Hướng {wind_dir} - Gust {gust:.0f} km/h",
+            "wi wi-strong-wind",
+            "#43b36a",
+            wind_speed * 3
+        ))
 
     c3, c4 = st.columns(2)
+
     with c3:
-        st.markdown(
-            metric_card(
-                "Pressure",
-                f"{pressure:.0f} hPa",
-                "Áp suất mực nước biển",
-                "wi wi-barometer",
-                "#9c88ff",
-                (pressure - 950) * 2
-            ),
-            unsafe_allow_html=True
-        )
+        render_html(metric_card(
+            "Pressure",
+            f"{pressure:.0f} hPa",
+            "Áp suất mực nước biển",
+            "wi wi-barometer",
+            "#9a7dff",
+            (pressure - 950) * 2
+        ))
+
     with c4:
-        st.markdown(
-            metric_card(
-                "Humidity",
-                f"{humidity}%",
-                "Độ ẩm không khí",
-                "wi wi-humidity",
-                "#5d86ff",
-                humidity
-            ),
-            unsafe_allow_html=True
-        )
+        render_html(metric_card(
+            "Humidity",
+            f"{humidity}%",
+            "Độ ẩm không khí",
+            "wi wi-humidity",
+            "#5b83ff",
+            humidity
+        ))
 
     c5, c6 = st.columns(2)
-    with c5:
-        st.markdown(
-            metric_card(
-                "UV Index",
-                f"{uv:.1f}",
-                "Chỉ số UV theo giờ",
-                "wi wi-hot",
-                "#f2a12d",
-                uv / 12 * 100
-            ),
-            unsafe_allow_html=True
-        )
-    with c6:
-        st.markdown(
-            metric_card(
-                "Cloud Cover",
-                f"{cloud}%",
-                "Mức độ mây che phủ",
-                "wi wi-cloudy",
-                "#f4b04b",
-                cloud
-            ),
-            unsafe_allow_html=True
-        )
 
-    st.markdown('<div class="section-title">Xác suất mưa 24 giờ tới</div>', unsafe_allow_html=True)
+    with c5:
+        render_html(metric_card(
+            "UV Index",
+            f"{uv:.1f}",
+            "Chỉ số UV theo giờ",
+            "wi wi-hot",
+            "#f5a623",
+            uv / 12 * 100
+        ))
+
+    with c6:
+        render_html(metric_card(
+            "Cloud Cover",
+            f"{cloud}%",
+            "Mức độ mây che phủ",
+            "wi wi-cloudy",
+            "#f5a623",
+            cloud
+        ))
+
+    render_html('<div class="section-title">Xác suất mưa 24 giờ tới</div>')
+
     fig_rain = px.bar(
         next_24h,
         x="time",
         y="precipitation_probability",
-        labels={"time": "Thời gian", "precipitation_probability": "Xác suất mưa (%)"}
+        labels={
+            "time": "Thời gian",
+            "precipitation_probability": "Xác suất mưa (%)"
+        }
     )
+
     fig_rain.update_layout(
         height=320,
         margin=dict(l=10, r=10, t=20, b=10),
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#f2ece5"
+        plot_bgcolor="#f3eee8"
     )
+
     st.plotly_chart(fig_rain, use_container_width=True)
 
 
