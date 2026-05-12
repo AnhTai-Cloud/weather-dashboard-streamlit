@@ -20,7 +20,9 @@ st.set_page_config(
 # SAFE HTML RENDER
 # =========================
 def render_html(html: str):
-    st.markdown(textwrap.dedent(html).strip(), unsafe_allow_html=True)
+    html = textwrap.dedent(html).strip()
+    html = " ".join(line.strip() for line in html.splitlines())
+    st.markdown(html, unsafe_allow_html=True)
 
 
 # =========================
