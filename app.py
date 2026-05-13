@@ -310,7 +310,13 @@ html_template = Template(r"""
             font-size: 18px;
             font-weight: 950;
         }
-
+        .day-weather {
+            margin-top: 8px;
+            font-size: 13px;
+            font-weight: 900;
+            color: #3c4050;
+            min-height: 18px;
+        }
         .day-rain {
             margin-top: 5px;
             font-size: 12px;
@@ -1099,6 +1105,7 @@ async function loadForecast(force = false) {
                 + "<div class='day-name'>" + (day.day_name || "--") + "</div>"
                 + "<div class='day-date'>" + (day.date || "--") + "</div>"
                 + "<div class='day-icon'><i class='" + iconClass(day.icon) + "'></i></div>"
+                + "<div class='day-weather'>" + (day.weather || "--") + "</div>"
                 + "<div class='day-temp'>"
                 + Number(day.temp_max || 0).toFixed(0) + "° / "
                 + Number(day.temp_min || 0).toFixed(0) + "°"
