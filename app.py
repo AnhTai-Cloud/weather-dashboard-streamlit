@@ -57,9 +57,6 @@ MQTT_WS_PORT = 8884
 MQTT_WS_PATH = "/mqtt"
 
 MQTT_USERNAME = "ESP32-client"
-
-# Nên đặt MQTT_PASSWORD trong Streamlit Secrets.
-# Nếu chưa dùng secrets, thay YOUR_MQTT_PASSWORD bằng mật khẩu MQTT thật.
 MQTT_PASSWORD = st.secrets["MQTT_PASSWORD"] if "MQTT_PASSWORD" in st.secrets else "Tan01052005!"
 
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
@@ -282,7 +279,7 @@ html_template = Template(r"""
             background: rgba(255,255,255,0.72);
             border-radius: 24px;
             padding: 16px 12px;
-            min-height: 190px;
+            min-height: 205px;
             text-align: center;
         }
 
@@ -305,11 +302,6 @@ html_template = Template(r"""
             color: #f5a623;
         }
 
-        .day-temp {
-            margin-top: 14px;
-            font-size: 18px;
-            font-weight: 950;
-        }
         .day-weather {
             margin-top: 8px;
             font-size: 13px;
@@ -317,6 +309,13 @@ html_template = Template(r"""
             color: #3c4050;
             min-height: 18px;
         }
+
+        .day-temp {
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: 950;
+        }
+
         .day-rain {
             margin-top: 5px;
             font-size: 12px;
@@ -475,6 +474,11 @@ html_template = Template(r"""
             margin-bottom: 10px;
         }
 
+        .chart-canvas-wrap {
+            height: 430px;
+            width: 100%;
+        }
+
         @media (max-width: 1150px) {
             .hero {
                 grid-template-columns: 1fr;
@@ -564,6 +568,7 @@ html_template = Template(r"""
                     <div class="day-name">--</div>
                     <div class="day-date">--</div>
                     <div class="day-icon"><i class="wi wi-day-cloudy"></i></div>
+                    <div class="day-weather">--</div>
                     <div class="day-temp">-- / --</div>
                     <div class="day-rain">Mưa: --</div>
                 </div>
@@ -682,7 +687,9 @@ html_template = Template(r"""
     <div class="section-title">Biểu đồ nhiệt độ</div>
 
     <div class="chart-card">
-        <canvas id="tempChart" height="105"></canvas>
+        <div class="chart-canvas-wrap">
+            <canvas id="tempChart"></canvas>
+        </div>
     </div>
 
     <div class="section-title">Payload mới nhất</div>
@@ -1122,6 +1129,7 @@ async function loadForecast(force = false) {
                 + "<div class='day-name'>--</div>"
                 + "<div class='day-date'>--</div>"
                 + "<div class='day-icon'><i class='wi wi-day-cloudy'></i></div>"
+                + "<div class='day-weather'>--</div>"
                 + "<div class='day-temp'>-- / --</div>"
                 + "<div class='day-rain'>Mưa: --</div>"
                 + "</div>";
@@ -1261,4 +1269,4 @@ html_code = html_template.substitute(
     AI_API_BASE=json.dumps(AI_API_BASE),
 )
 
-html(html_code, height=3000, scrolling=True)
+html(html_code, height=3200, scrolling=True)
