@@ -30,11 +30,11 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - FIX CỨNG HIVEMQ CLOUD
 # =========================
-MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491adf.s1.eu.hivemq.cloud"
+MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491a1df.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883
 
 MQTT_USERNAME = "anhtai"
-MQTT_PASSWORD = "NHAP_MAT_KHAU_HIVEMQ_CUA_BAN"
+MQTT_PASSWORD = "31102005Tai@"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 MQTT_TOPIC_DATA = "iot/clothesline/data"
