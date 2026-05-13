@@ -1,50 +1,34 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
 import json
-import time
 import ssl
-import paho.mqtt.client as mqtt
+import time
 from datetime import datetime, timedelta
-from streamlit.components.v1 import html as components_html
-from streamlit_autorefresh import st_autorefresh
+
+import numpy as np
+import pandas as pd
+import paho.mqtt.client as mqtt
+import plotly.graph_objects as go
+import streamlit as st
 
 
-# =========================
+# =========================================================
 # PAGE CONFIG
-# =========================
+# =========================================================
 st.set_page_config(
     page_title="IoT Weather Dashboard",
     page_icon="🌦️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 
-# =========================
-# AUTO REFRESH
-# =========================
-st_autorefresh(
-    interval=10000,
-    key="mqtt_auto_refresh"
-)
-
-
-# =========================
-# FALLBACK DATA SOURCE
-# =========================
-DATA_SOURCE = "data.csv"
-
-
-# =========================
-# MQTT CONFIG - HIVEMQ CLOUD
-# =========================
-MQTT_BROKER = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
+# =========================================================
+# MQTT CONFIG - SỬA 3 DÒNG NÀY THEO HIVEMQ CỦA BẠN
+# =========================================================
+MQTT_BROKER = "NHAP_BROKER_HIVEMQ_CUA_BAN"
 MQTT_PORT = 8883
 
-MQTT_USERNAME = "ESP32-client"
-MQTT_PASSWORD = "Tan01052005!"
+MQTT_USERNAME = "NHAP_USERNAME_HIVEMQ"
+MQTT_PASSWORD = "NHAP_PASSWORD_HIVEMQ"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 
@@ -54,9 +38,9 @@ MQTT_TOPIC_CONTROL_DOOR = "smart_home/control/door"
 MQTT_TOPIC_CONTROL_MODE = "smart_home/control/mode"
 
 
-# =========================
+# =========================================================
 # DEVICE CONFIG
-# =========================
+# =========================================================
 SERVO_NAME = "MG90S"
 SERVO_OPEN_ANGLE = 90
 SERVO_CLOSE_ANGLE = 0
@@ -67,20 +51,24 @@ DOOR_OPEN_ANGLE = 90
 GAS_SENSOR_NAME = "MQ-5"
 GAS_SAFE_LIMIT = 300
 
+DATA_SOURCE = "data.csv"
 
-# =========================
-# CSS
-# =========================
+
+# =========================================================
+# CSS + ICON PACK
+# =========================================================
 st.markdown(
     """
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
+    <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
-st.markdown("""
+st.markdown(
+    """
 <style>
-html, body, .stApp, .main-title, .sub-title, .metric-card, .section-title, .control-note {
+html, body, .stApp {
     font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif !important;
 }
 
@@ -110,7 +98,6 @@ section[data-testid="stSidebar"] {
 .main-title {
     font-size: 30px;
     font-weight: 850;
-    letter-spacing: 0.15px;
     color: #2f3341;
     margin-bottom: 6px;
     text-transform: uppercase;
@@ -121,6 +108,14 @@ section[data-testid="stSidebar"] {
     color: #74777f;
     font-size: 14px;
     margin-bottom: 18px;
+}
+
+.section-title {
+    font-size: 23px;
+    font-weight: 850;
+    text-transform: uppercase;
+    margin: 24px 0 14px 0;
+    color: #2f3341;
 }
 
 .metric-card {
@@ -141,7 +136,6 @@ section[data-testid="stSidebar"] {
 .metric-title {
     font-size: 15px;
     font-weight: 850;
-    letter-spacing: 0.15px;
     text-transform: uppercase;
 }
 
@@ -185,22 +179,53 @@ section[data-testid="stSidebar"] {
     border-radius: 999px;
 }
 
-.section-title {
-    font-size: 24px;
-    font-weight: 850;
-    letter-spacing: 0.15px;
+.status-box {
+    background: #f3eee8;
+    border-radius: 22px;
+    padding: 16px 18px;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+    margin-bottom: 14px;
+}
+
+.status-title {
+    font-size: 14px;
+    color: #74777f;
     text-transform: uppercase;
-    margin: 24px 0 14px 0;
-    color: #2f3341;
-    line-height: 1.3;
+    font-weight: 750;
+}
+
+.status-value {
+    font-size: 25px;
+    font-weight: 850;
+    margin-top: 8px;
+}
+
+.mqtt-live {
+    background: #e8f6ef;
+    color: #20724b;
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-weight: 700;
+}
+
+.mqtt-warn {
+    background: #fff5d9;
+    color: #8a6200;
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-weight: 700;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
-# =========================
-# HELPER FUNCTIONS
-# =========================
+# =========================================================
+# BASIC HELPERS
+# =========================================================
 def clamp(x, min_val=0, max_val=100):
     try:
         return max(min_val, min(float(x), max_val))
@@ -245,59 +270,53 @@ def metric_card(title, value, desc, icon_class, color, percent):
     st.markdown(" ".join(html.split()), unsafe_allow_html=True)
 
 
-def status_card(title, state, desc, icon_class, color):
+def status_box(title, value, desc, color):
     html = f"""
-    <div class="metric-card">
-        <div class="metric-head">
-            <div class="metric-title">{title}</div>
-            <div class="metric-icon-box">
-                <i class="{icon_class}" style="color:{color};"></i>
-            </div>
-        </div>
-        <div class="metric-value" style="font-size:26px;">{state}</div>
+    <div class="status-box">
+        <div class="status-title">{title}</div>
+        <div class="status-value" style="color:{color};">{value}</div>
         <div class="metric-desc">{desc}</div>
-        <div class="progress-wrap">
-            <div class="progress-fill" style="width:100%; background:{color};"></div>
-        </div>
     </div>
     """
-
     st.markdown(" ".join(html.split()), unsafe_allow_html=True)
 
 
-# =========================
-# MQTT FUNCTIONS
-# =========================
+# =========================================================
+# MQTT
+# =========================================================
 def create_mqtt_client(suffix):
     client_id = f"{MQTT_CLIENT_ID}_{suffix}_{int(time.time() * 1000)}"
 
     client = mqtt.Client(
         client_id=client_id,
-        protocol=mqtt.MQTTv311
+        protocol=mqtt.MQTTv311,
     )
 
     client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
     client.tls_set(
         cert_reqs=ssl.CERT_REQUIRED,
-        tls_version=ssl.PROTOCOL_TLS_CLIENT
+        tls_version=ssl.PROTOCOL_TLS_CLIENT,
     )
 
     return client
 
 
-def mqtt_get_latest_sensor_data(timeout_sec=4):
+def mqtt_get_latest_sensor_data(timeout_sec=1.2):
+    """
+    Đọc payload mới nhất từ topic sensor.
+    ESP nên publish retained để fragment đọc được ngay.
+    """
+
     result = {
         "payload": None,
         "error": None,
-        "connected": False,
-        "raw": None
+        "raw": None,
     }
 
     try:
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
-                result["connected"] = True
                 client.subscribe(MQTT_TOPIC_SENSOR_DATA, qos=1)
             else:
                 result["error"] = f"MQTT connect failed, rc={rc}"
@@ -314,14 +333,14 @@ def mqtt_get_latest_sensor_data(timeout_sec=4):
         client.on_connect = on_connect
         client.on_message = on_message
 
-        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=30)
         client.loop_start()
 
         start = time.time()
         while time.time() - start < timeout_sec:
             if result["payload"] is not None or result["error"] is not None:
                 break
-            time.sleep(0.1)
+            time.sleep(0.05)
 
         client.loop_stop()
         client.disconnect()
@@ -333,50 +352,36 @@ def mqtt_get_latest_sensor_data(timeout_sec=4):
 
 
 def mqtt_publish_control(topic, message):
+    """
+    Gửi lệnh nhanh xuống ESP.
+    QoS 0 để giảm delay.
+    """
+
     try:
-        connected = {
-            "ok": False,
-            "rc": None
-        }
-
-        def on_connect(client, userdata, flags, rc):
-            connected["rc"] = rc
-            connected["ok"] = (rc == 0)
-
-        client = create_mqtt_client("pub")
-        client.on_connect = on_connect
-
-        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
+        client = create_mqtt_client("pub_fast")
+        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=30)
         client.loop_start()
 
-        start_time = time.time()
-        while connected["rc"] is None and time.time() - start_time < 5:
-            time.sleep(0.1)
-
-        if not connected["ok"]:
-            client.loop_stop()
-            client.disconnect()
-            return False, f"MQTT connect failed, rc={connected['rc']}"
+        time.sleep(0.15)
 
         info = client.publish(
             topic,
             message,
-            qos=1,
-            retain=False
+            qos=0,
+            retain=False,
         )
 
-        info.wait_for_publish(timeout=5)
+        start = time.time()
+        while not info.is_published() and time.time() - start < 0.6:
+            time.sleep(0.03)
 
         client.loop_stop()
         client.disconnect()
 
-        if info.rc == mqtt.MQTT_ERR_SUCCESS:
-            return True, {
-                "topic": topic,
-                "message": message
-            }
-
-        return False, f"Publish failed, rc={info.rc}"
+        return True, {
+            "topic": topic,
+            "message": message,
+        }
 
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
@@ -406,9 +411,9 @@ def mqtt_set_manual_mode():
     return mqtt_publish_control(MQTT_TOPIC_CONTROL_MODE, "MANUAL")
 
 
-# =========================
+# =========================================================
 # DATA MAPPING
-# =========================
+# =========================================================
 def mqtt_payload_to_row(payload):
     rain_state = str(payload.get("rain_state", "NO_RAIN")).upper()
     rack_state = str(payload.get("rack_state", "CLOSE")).upper()
@@ -451,9 +456,9 @@ def mqtt_payload_to_row(payload):
     }
 
 
-# =========================
+# =========================================================
 # FALLBACK DATA
-# =========================
+# =========================================================
 def make_demo_data():
     now = datetime.now().replace(minute=0, second=0, microsecond=0)
 
@@ -540,10 +545,26 @@ def load_fallback_data():
     return df
 
 
-# =========================
+# =========================================================
 # UI STATE
-# =========================
-def init_device_state():
+# =========================================================
+def init_state():
+    if "live_df" not in st.session_state:
+        st.session_state.live_df = pd.DataFrame()
+
+    if "latest_data" not in st.session_state:
+        fallback_df = load_fallback_data()
+        st.session_state.latest_data = fallback_df.iloc[-1].to_dict()
+
+    if "mqtt_payload" not in st.session_state:
+        st.session_state.mqtt_payload = None
+
+    if "mqtt_error" not in st.session_state:
+        st.session_state.mqtt_error = None
+
+    if "data_source_name" not in st.session_state:
+        st.session_state.data_source_name = "DATA.CSV FALLBACK"
+
     if "clothesline_state" not in st.session_state:
         st.session_state.clothesline_state = "ĐANG ĐÓNG"
 
@@ -553,13 +574,10 @@ def init_device_state():
     if "last_manual_action" not in st.session_state:
         st.session_state.last_manual_action = "CHƯA CÓ LỆNH"
 
-    if "live_df" not in st.session_state:
-        st.session_state.live_df = pd.DataFrame()
 
-
-def update_state_from_latest(latest):
-    rack_state = str(latest.get("rack_state", "CLOSE")).upper()
-    door_state = str(latest.get("door_state", "CLOSE")).upper()
+def update_state_from_latest(row):
+    rack_state = str(row.get("rack_state", "CLOSE")).upper()
+    door_state = str(row.get("door_state", "CLOSE")).upper()
 
     if rack_state == "OPEN":
         st.session_state.clothesline_state = "ĐANG MỞ"
@@ -572,9 +590,9 @@ def update_state_from_latest(latest):
         st.session_state.door_state = "ĐANG ĐÓNG"
 
 
-# =========================
+# =========================================================
 # AI DECISION
-# =========================
+# =========================================================
 def auto_decide_command(latest):
     rain_sensor = int(latest["rain_sensor"])
     prediction = str(latest["ai_prediction"])
@@ -596,349 +614,200 @@ def auto_decide_command(latest):
     return "CLOSE", "Điều kiện chưa rõ, đưa dàn phơi về trạng thái an toàn"
 
 
-# =========================
-# MAIN WEATHER CARD
-# =========================
-def main_iot_weather_card(df, latest):
-    last_7 = df.tail(7).copy().reset_index(drop=True)
+# =========================================================
+# LIVE DATA FRAGMENT
+# =========================================================
+@st.fragment(run_every="2s")
+def live_sensor_fragment():
+    mqtt_payload, mqtt_error, mqtt_raw = mqtt_get_latest_sensor_data(timeout_sec=1.2)
 
-    temps = last_7["temperature"].astype(float).tolist()
-    rains = last_7["rain_sensor"].astype(float).tolist()
-    times = [pd.to_datetime(t).strftime("%H:%M") for t in last_7["time"]]
+    if mqtt_payload is not None:
+        mqtt_row = mqtt_payload_to_row(mqtt_payload)
 
-    min_t = min(temps)
-    max_t = max(temps)
-    temp_range = max(max_t - min_t, 1)
+        st.session_state.latest_data = mqtt_row
+        st.session_state.mqtt_payload = mqtt_payload
+        st.session_state.mqtt_error = None
+        st.session_state.data_source_name = "MQTT REALTIME"
 
-    width = 720
-    height = 170
-    left_pad = 38
-    right_pad = 30
-    top_pad = 24
-    bottom_pad = 54
+        st.session_state.live_df = pd.concat(
+            [st.session_state.live_df, pd.DataFrame([mqtt_row])],
+            ignore_index=True,
+        ).tail(100)
 
-    usable_w = width - left_pad - right_pad
-    usable_h = height - top_pad - bottom_pad
+        update_state_from_latest(mqtt_row)
 
-    points = []
-    temp_labels = ""
-    rain_labels = ""
+    else:
+        st.session_state.mqtt_error = mqtt_error
 
-    for i, temp in enumerate(temps):
-        x = left_pad + i * usable_w / max(len(temps) - 1, 1)
-        y = top_pad + (max_t - temp) / temp_range * usable_h
-        points.append((x, y))
+    latest = pd.Series(st.session_state.latest_data)
 
-        temp_labels += f"""
-        <div class="temp-label" style="left:{x - 10}px; top:{y - 24}px;">
-            {temp:.0f}°
-        </div>
-        """
+    if st.session_state.data_source_name == "MQTT REALTIME":
+        st.markdown(
+            '<div class="mqtt-live">ĐANG NHẬN DỮ LIỆU MQTT REALTIME TỪ ESP32</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="mqtt-warn">CHƯA NHẬN ĐƯỢC MQTT, ĐANG DÙNG DỮ LIỆU DỰ PHÒNG</div>',
+            unsafe_allow_html=True,
+        )
 
-        rain_text = "Có mưa" if rains[i] == 1 else "0%"
-        rain_labels += f"""
-        <div class="rain-label" style="left:{x - 22}px;">
-            <span class="drop">💧</span>{rain_text}
-            <div class="time-label">{times[i]}</div>
-        </div>
-        """
-
-    polyline_points = " ".join([f"{x},{y}" for x, y in points])
-    area_points = (
-        f"{left_pad},{height-bottom_pad} "
-        + polyline_points
-        + f" {width-right_pad},{height-bottom_pad}"
+    st.markdown(
+        f'<div class="sub-title">Cập nhật: {latest["time"]}</div>',
+        unsafe_allow_html=True,
     )
 
-    prediction = latest["ai_prediction"]
-    icon_class, icon_color = weather_icon(prediction)
-    rain_status = "Có mưa" if int(latest["rain_sensor"]) == 1 else "Không mưa"
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        metric_card(
+            "Nhiệt độ",
+            f'{float(latest["temperature"]):.1f}°C',
+            st.session_state.data_source_name,
+            "wi wi-thermometer",
+            "#f5a623",
+            clamp(float(latest["temperature"]) / 45 * 100),
+        )
+
+    with c2:
+        metric_card(
+            "Độ ẩm",
+            f'{float(latest["humidity"]):.0f}%',
+            st.session_state.data_source_name,
+            "wi wi-humidity",
+            "#5b83ff",
+            latest["humidity"],
+        )
+
+    with c3:
+        metric_card(
+            "Áp suất",
+            f'{float(latest["pressure"]):.1f} hPa',
+            "BMP280",
+            "wi wi-barometer",
+            "#9a7dff",
+            clamp((float(latest["pressure"]) - 950) * 2),
+        )
+
+    with c4:
+        metric_card(
+            "Ánh sáng",
+            f'{float(latest["light"]):.0f} lux',
+            "Light sensor",
+            "wi wi-day-sunny",
+            "#f5a623",
+            clamp(float(latest["light"]) / 1000 * 100),
+        )
+
+    c5, c6, c7, c8 = st.columns(4)
+
+    with c5:
+        rain_text = "Có mưa" if int(latest["rain_sensor"]) == 1 else "Không mưa"
+
+        metric_card(
+            "Cảm biến mưa",
+            rain_text,
+            f'Raw: {latest.get("rain_raw", 0)} | {latest.get("rain_state", "UNKNOWN")}',
+            "wi wi-raindrop",
+            "#e74c3c" if int(latest["rain_sensor"]) == 1 else "#43b36a",
+            100 if int(latest["rain_sensor"]) == 1 else 10,
+        )
+
+    with c6:
+        gas_value = float(latest["gas"])
+        gas_alarm = bool(latest.get("gas_alarm", gas_value >= GAS_SAFE_LIMIT))
+        gas_status = "CẢNH BÁO" if gas_alarm else "AN TOÀN"
+
+        metric_card(
+            "Gas MQ-5",
+            f"{gas_value:.0f}",
+            f"{gas_status} | Ngưỡng {GAS_SAFE_LIMIT}",
+            "wi wi-smoke",
+            "#e74c3c" if gas_alarm else "#43b36a",
+            clamp(gas_value / 1000 * 100),
+        )
+
+    with c7:
+        pred = latest["ai_prediction"]
+        icon, color = weather_icon(pred)
+
+        metric_card(
+            "AI dự đoán",
+            pred,
+            "Nắng / Âm u / Mưa",
+            icon,
+            color,
+            80,
+        )
+
+    with c8:
+        metric_card(
+            "Chế độ ESP",
+            str(latest.get("mode", "UNKNOWN")),
+            f'Period: {latest.get("period", "UNKNOWN")}',
+            "wi wi-time-3",
+            "#43b36a" if str(latest.get("mode", "")).upper() == "AUTO" else "#f5a623",
+            80,
+        )
+
+    st.markdown('<div class="section-title">TRẠNG THÁI THIẾT BỊ</div>', unsafe_allow_html=True)
+
+    s1, s2 = st.columns(2)
+
+    with s1:
+        color = "#43b36a" if st.session_state.clothesline_state == "ĐANG MỞ" else "#e74c3c"
+        status_box(
+            "Trạng thái dàn phơi",
+            st.session_state.clothesline_state,
+            f'ESP: {latest.get("rack_state", "UNKNOWN")}',
+            color,
+        )
+
+    with s2:
+        color = "#43b36a" if st.session_state.door_state == "ĐANG MỞ" else "#e74c3c"
+        status_box(
+            "Trạng thái cửa",
+            st.session_state.door_state,
+            f'ESP: {latest.get("door_state", "UNKNOWN")}',
+            color,
+        )
 
     auto_cmd, auto_reason = auto_decide_command(latest)
 
     if auto_cmd == "CLOSE":
-        action = "ĐÓNG DÀN PHƠI"
-        action_color = "#e74c3c"
+        control_color = "#e74c3c"
+        control_icon = "wi wi-rain"
+        control_text = f"ĐÓNG {SERVO_CLOSE_ANGLE}°"
     else:
-        action = "MỞ DÀN PHƠI"
-        action_color = "#43b36a"
+        control_color = "#43b36a"
+        control_icon = "wi wi-day-sunny"
+        control_text = f"MỞ {SERVO_OPEN_ANGLE}°"
 
-    daily_boxes = ""
+    metric_card(
+        "AI điều khiển dàn phơi",
+        control_text,
+        auto_reason,
+        control_icon,
+        control_color,
+        100,
+    )
 
-    for i, row in last_7.iterrows():
-        box_icon, box_color = weather_icon(row["weather_label"])
-
-        label = "NOW" if i == len(last_7) - 1 else pd.to_datetime(row["time"]).strftime("%H:%M")
-
-        daily_boxes += f"""
-        <div class="day-box">
-            <div class="day-name">{label}</div>
-            <div class="day-icon" style="color:{box_color};">
-                <i class="{box_icon}"></i>
-            </div>
-            <div class="day-temp">{float(row["temperature"]):.0f}°C</div>
-        </div>
-        """
-
-    html = f"""
-    <html>
-    <head>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
-        <style>
-            body, .card, .place, .updated, .action, .temp, .condition, .desc, .reason, .pill, .day-name, .day-temp, .time-label {{
-                font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif !important;
-            }}
-
-            i[class^="wi"], i[class*=" wi-"] {{
-                font-family: "weathericons" !important;
-                font-style: normal !important;
-            }}
-
-            body {{
-                margin: 0;
-                color: #2f2f35;
-                background: transparent;
-            }}
-
-            .card {{
-                background: #f3eee8;
-                border-radius: 26px;
-                overflow: hidden;
-                box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-            }}
-
-            .top {{
-                padding: 22px 24px 8px 24px;
-                display: flex;
-                justify-content: space-between;
-                align-items: flex-start;
-            }}
-
-            .place {{
-                font-size: 18px;
-                font-weight: 850;
-                text-transform: uppercase;
-                letter-spacing: 0.1px;
-            }}
-
-            .updated {{
-                margin-top: 6px;
-                font-size: 13px;
-                color: #777;
-            }}
-
-            .action {{
-                background: {action_color};
-                color: white;
-                font-weight: 850;
-                border-radius: 999px;
-                padding: 9px 14px;
-                font-size: 13px;
-                text-transform: uppercase;
-                letter-spacing: 0.1px;
-            }}
-
-            .main {{
-                padding: 8px 24px 14px 24px;
-                display: flex;
-                align-items: center;
-                gap: 22px;
-            }}
-
-            .main-icon {{
-                width: 92px;
-                text-align: center;
-                font-size: 82px;
-                color: {icon_color};
-            }}
-
-            .main-content {{
-                flex: 1;
-            }}
-
-            .temp-row {{
-                display: flex;
-                align-items: center;
-                gap: 24px;
-            }}
-
-            .temp {{
-                font-size: 58px;
-                font-weight: 850;
-                line-height: 1;
-            }}
-
-            .condition {{
-                font-size: 22px;
-                font-weight: 850;
-                text-transform: uppercase;
-            }}
-
-            .desc {{
-                margin-top: 8px;
-                font-size: 14px;
-                color: #555;
-            }}
-
-            .reason {{
-                margin-top: 7px;
-                font-size: 13px;
-                color: #777;
-            }}
-
-            .pill-row {{
-                display: flex;
-                gap: 10px;
-                flex-wrap: wrap;
-                margin-top: 13px;
-            }}
-
-            .pill {{
-                background: white;
-                border-radius: 999px;
-                padding: 7px 11px;
-                font-size: 13px;
-                color: #444;
-            }}
-
-            .pill i {{
-                color: #f5a623;
-                margin-right: 6px;
-            }}
-
-            .days {{
-                display: grid;
-                grid-template-columns: repeat(7, 1fr);
-                background: rgba(255,255,255,0.45);
-            }}
-
-            .day-box {{
-                text-align: center;
-                padding: 13px 6px 12px 6px;
-                border-right: 1px solid rgba(0,0,0,0.04);
-            }}
-
-            .day-box:last-child {{
-                background: rgba(255,255,255,0.75);
-            }}
-
-            .day-name {{
-                font-weight: 850;
-                font-size: 13px;
-                margin-bottom: 7px;
-            }}
-
-            .day-icon {{
-                font-size: 30px;
-                margin-bottom: 7px;
-            }}
-
-            .day-temp {{
-                font-size: 14px;
-                color: #555;
-            }}
-
-            .chart-wrap {{
-                position: relative;
-                height: 185px;
-                background: #f8f6f3;
-            }}
-
-            .chart-svg {{
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-            }}
-
-            .temp-label {{
-                position: absolute;
-                font-size: 13px;
-                color: #555;
-            }}
-
-            .rain-label {{
-                position: absolute;
-                bottom: 18px;
-                min-width: 48px;
-                font-size: 13px;
-                color: #0076b6;
-                text-align: center;
-            }}
-
-            .time-label {{
-                margin-top: 9px;
-                color: #555;
-                font-size: 13px;
-            }}
-
-            .drop {{
-                font-size: 10px;
-                margin-right: 2px;
-            }}
-        </style>
-    </head>
-
-    <body>
-        <div class="card">
-            <div class="top">
-                <div>
-                    <div class="place">TRẠM IOT PHƠI ĐỒ THÔNG MINH</div>
-                    <div class="updated">Cập nhật: {pd.to_datetime(latest["time"]).strftime("%d/%m/%Y %H:%M:%S")}</div>
-                </div>
-                <div class="action">{action}</div>
-            </div>
-
-            <div class="main">
-                <div class="main-icon"><i class="{icon_class}"></i></div>
-
-                <div class="main-content">
-                    <div class="temp-row">
-                        <div class="temp">{float(latest["temperature"]):.0f}°C</div>
-                        <div class="condition">{prediction}</div>
-                    </div>
-
-                    <div class="desc">
-                        Độ ẩm {float(latest["humidity"]):.0f}% ·
-                        Áp suất {float(latest["pressure"]):.1f} hPa ·
-                        Ánh sáng {float(latest["light"]):.0f} lux ·
-                        {rain_status}
-                    </div>
-
-                    <div class="reason">Quyết định: {auto_reason}</div>
-
-                    <div class="pill-row">
-                        <div class="pill"><i class="wi wi-humidity"></i>{float(latest["humidity"]):.0f}% độ ẩm</div>
-                        <div class="pill"><i class="wi wi-barometer"></i>{float(latest["pressure"]):.1f} hPa</div>
-                        <div class="pill"><i class="wi wi-day-sunny"></i>{float(latest["light"]):.0f} lux</div>
-                        <div class="pill"><i class="wi wi-raindrop"></i>{rain_status}</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="days">{daily_boxes}</div>
-
-            <div class="chart-wrap">
-                <svg class="chart-svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
-                    <polygon points="{area_points}" fill="rgba(255, 138, 138, 0.25)"></polygon>
-                    <polyline points="{polyline_points}" fill="none" stroke="rgba(245, 155, 155, 0.75)" stroke-width="3"></polyline>
-                    <line x1="{left_pad}" y1="{height-bottom_pad}" x2="{width-right_pad}" y2="{height-bottom_pad}" stroke="#ddd" stroke-width="1"></line>
-                </svg>
-                {temp_labels}
-                {rain_labels}
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-    components_html(html, height=610)
+    if st.session_state.mqtt_error:
+        st.warning(f"Lỗi MQTT gần nhất: {st.session_state.mqtt_error}")
 
 
-# =========================
-# BIG TEMPERATURE CHART
-# =========================
-def render_big_temperature_chart(df):
+# =========================================================
+# CHART FRAGMENT
+# =========================================================
+@st.fragment(run_every="6s")
+def chart_fragment():
+    fallback_df = load_fallback_data()
+
+    if not st.session_state.live_df.empty:
+        df = pd.concat([fallback_df, st.session_state.live_df], ignore_index=True)
+    else:
+        df = fallback_df
+
     chart_df = df.tail(24).copy()
     chart_df["time"] = pd.to_datetime(chart_df["time"])
 
@@ -957,7 +826,7 @@ def render_big_temperature_chart(df):
             mode="lines",
             line=dict(width=0),
             showlegend=False,
-            hoverinfo="skip"
+            hoverinfo="skip",
         )
     )
 
@@ -972,21 +841,17 @@ def render_big_temperature_chart(df):
                 width=4,
                 color="rgba(255, 150, 150, 0.95)",
                 shape="spline",
-                smoothing=1.15
+                smoothing=1.15,
             ),
             marker=dict(
                 size=8,
                 color="rgba(255, 130, 130, 1)",
-                line=dict(width=2, color="white")
+                line=dict(width=2, color="white"),
             ),
             fill="tonexty",
             fillcolor="rgba(255, 150, 150, 0.22)",
             showlegend=False,
-            hovertemplate=(
-                "<b>%{x|%H:%M}</b><br>"
-                "Nhiệt độ: %{y:.1f}°C"
-                "<extra></extra>"
-            )
+            hovertemplate="<b>%{x|%H:%M}</b><br>Nhiệt độ: %{y:.1f}°C<extra></extra>",
         )
     )
 
@@ -1002,7 +867,7 @@ def render_big_temperature_chart(df):
         font=dict(
             family="Segoe UI, Inter, Roboto, Arial, sans-serif",
             size=13,
-            color="#2f3341"
+            color="#2f3341",
         ),
         xaxis=dict(
             title="",
@@ -1012,7 +877,7 @@ def render_big_temperature_chart(df):
             ticktext=[t.strftime("%H:%M") for t in tick_df["time"]],
             linecolor="rgba(0,0,0,0.08)",
             tickfont=dict(size=13),
-            fixedrange=True
+            fixedrange=True,
         ),
         yaxis=dict(
             title="NHIỆT ĐỘ °C",
@@ -1021,13 +886,13 @@ def render_big_temperature_chart(df):
             gridcolor="rgba(0,0,0,0.06)",
             zeroline=False,
             tickfont=dict(size=12),
-            fixedrange=True
-        )
+            fixedrange=True,
+        ),
     )
 
     st.markdown(
-        '<div class="section-title">BIỂU ĐỒ NHIỆT ĐỘ & MƯA 24 GIỜ GẦN NHẤT</div>',
-        unsafe_allow_html=True
+        '<div class="section-title">BIỂU ĐỒ NHIỆT ĐỘ & MƯA GẦN NHẤT</div>',
+        unsafe_allow_html=True,
     )
 
     with st.container(border=True):
@@ -1036,8 +901,8 @@ def render_big_temperature_chart(df):
             use_container_width=True,
             config={
                 "displayModeBar": False,
-                "responsive": True
-            }
+                "responsive": True,
+            },
         )
 
         rain_data = chart_df.tail(8).reset_index(drop=True)
@@ -1059,82 +924,31 @@ def render_big_temperature_chart(df):
                         font-family:'Segoe UI', Arial, sans-serif;
                     ">
                         💧 {rain_text}
-                        <div style="
-                            color:#555;
-                            margin-top:6px;
-                            font-size:13px;
-                        ">
+                        <div style="color:#555; margin-top:6px; font-size:13px;">
                             {time_text}
                         </div>
                     </div>
                     """,
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
 
 
-# =========================
-# LOAD MQTT DATA
-# =========================
-fallback_df = load_fallback_data()
-init_device_state()
-
-mqtt_payload, mqtt_error, mqtt_raw = mqtt_get_latest_sensor_data(timeout_sec=4)
-
-if mqtt_payload is not None:
-    mqtt_row = mqtt_payload_to_row(mqtt_payload)
-
-    st.session_state.live_df = pd.concat(
-        [st.session_state.live_df, pd.DataFrame([mqtt_row])],
-        ignore_index=True
-    ).tail(100)
-
-    df = pd.concat([fallback_df, st.session_state.live_df], ignore_index=True)
-    latest = pd.Series(mqtt_row)
-    update_state_from_latest(latest)
-    data_source_name = "MQTT REALTIME"
-
-else:
-    df = fallback_df
-    latest = df.iloc[-1]
-    update_state_from_latest(latest)
-    data_source_name = "DATA.CSV FALLBACK"
+# =========================================================
+# INIT
+# =========================================================
+init_state()
 
 
-# =========================
-# SIDEBAR
-# =========================
+# =========================================================
+# SIDEBAR - KHÔNG AUTO REFRESH TOÀN TRANG
+# =========================================================
 st.sidebar.title("⚙️ CÀI ĐẶT HỆ THỐNG")
-
-st.sidebar.write("Nguồn dữ liệu:")
-if mqtt_payload is not None:
-    st.sidebar.success("MQTT REALTIME")
-else:
-    st.sidebar.warning("DATA.CSV FALLBACK")
-    if mqtt_error:
-        st.sidebar.error(mqtt_error)
 
 st.sidebar.write("Broker:")
 st.sidebar.code(MQTT_BROKER)
 
-st.sidebar.write("Topic sensor:")
+st.sidebar.write("Sensor topic:")
 st.sidebar.code(MQTT_TOPIC_SENSOR_DATA)
-
-if st.sidebar.button("LÀM MỚI DỮ LIỆU", use_container_width=True):
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("DEBUG MQTT")
-
-if mqtt_payload is not None:
-    st.sidebar.success("Đã nhận payload từ ESP32")
-    with st.sidebar.expander("Payload mới nhất"):
-        st.json(mqtt_payload)
-else:
-    st.sidebar.warning("Chưa nhận được payload từ ESP32")
-    st.sidebar.caption("ESP nên publish retained lên smart_home/sensor/data")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("📡 ĐIỀU KHIỂN MQTT")
 
 st.sidebar.write("Rack topic:")
 st.sidebar.code(MQTT_TOPIC_CONTROL_RACK)
@@ -1145,316 +959,194 @@ st.sidebar.code(MQTT_TOPIC_CONTROL_DOOR)
 st.sidebar.write("Mode topic:")
 st.sidebar.code(MQTT_TOPIC_CONTROL_MODE)
 
-control_mode = st.sidebar.radio(
-    "Chế độ điều khiển dàn phơi",
-    ["Thủ công", "Tự động theo AI"]
-)
+st.sidebar.markdown("---")
+st.sidebar.subheader("📡 ĐIỀU KHIỂN MQTT")
+
+if st.sidebar.button("CHUYỂN MANUAL", use_container_width=True):
+    ok, result = mqtt_set_manual_mode()
+    if ok:
+        st.sidebar.success("Đã gửi MANUAL")
+    else:
+        st.sidebar.error(f"Lỗi: {result}")
+
+if st.sidebar.button("CHUYỂN AUTO", use_container_width=True):
+    ok, result = mqtt_set_auto_mode()
+    if ok:
+        st.sidebar.success("Đã gửi AUTO")
+    else:
+        st.sidebar.error(f"Lỗi: {result}")
 
 st.sidebar.markdown("### ĐIỀU KHIỂN THỦ CÔNG")
 
-col_open, col_close = st.sidebar.columns(2)
+side_col1, side_col2 = st.sidebar.columns(2)
 
-with col_open:
-    if st.button("MỞ 90°", use_container_width=True):
-        mqtt_set_manual_mode()
+with side_col1:
+    if st.button("MỞ 90°", use_container_width=True, key="side_open"):
         ok, result = mqtt_open_rack()
-
         if ok:
             st.session_state.clothesline_state = "ĐANG MỞ"
             st.session_state.last_manual_action = "MỞ DÀN PHƠI 90°"
             st.sidebar.success("Đã gửi OPEN")
         else:
-            st.sidebar.error(f"Không gửi được MQTT: {result}")
+            st.sidebar.error(f"Lỗi: {result}")
 
-with col_close:
-    if st.button("ĐÓNG 0°", use_container_width=True):
-        mqtt_set_manual_mode()
+with side_col2:
+    if st.button("ĐÓNG 0°", use_container_width=True, key="side_close"):
         ok, result = mqtt_close_rack()
-
         if ok:
             st.session_state.clothesline_state = "ĐANG ĐÓNG"
             st.session_state.last_manual_action = "ĐÓNG DÀN PHƠI 0°"
             st.sidebar.success("Đã gửi CLOSE")
         else:
-            st.sidebar.error(f"Không gửi được MQTT: {result}")
+            st.sidebar.error(f"Lỗi: {result}")
 
-if st.sidebar.button("MỞ CỬA MG90S", use_container_width=True):
-    mqtt_set_manual_mode()
+if st.sidebar.button("MỞ CỬA MG90S", use_container_width=True, key="side_door"):
     ok, result = mqtt_open_door()
-
     if ok:
         st.session_state.door_state = "ĐANG MỞ"
         st.session_state.last_manual_action = "MỞ CỬA MG90S"
         st.sidebar.success("Đã gửi DOOR OPEN")
     else:
-        st.sidebar.error(f"Không gửi được MQTT: {result}")
+        st.sidebar.error(f"Lỗi: {result}")
+
+st.sidebar.markdown("---")
+if st.session_state.mqtt_payload:
+    with st.sidebar.expander("Payload MQTT mới nhất"):
+        st.json(st.session_state.mqtt_payload)
+else:
+    st.sidebar.warning("Chưa có payload MQTT trong phiên này")
 
 
-# =========================
-# AUTO CONTROL THEO AI
-# =========================
-if "last_auto_command" not in st.session_state:
-    st.session_state.last_auto_command = None
-
-if control_mode == "Tự động theo AI":
-    auto_cmd, auto_reason = auto_decide_command(latest)
-
-    st.sidebar.markdown("### AI ĐỀ XUẤT DÀN PHƠI")
-    st.sidebar.info(f"Lệnh: {auto_cmd}\n\nLý do: {auto_reason}")
-
-    auto_send = st.sidebar.checkbox(
-        "Cho phép tự động gửi lệnh về ESP",
-        value=False
-    )
-
-    if auto_send:
-        current_key = f"{auto_cmd}_{latest['time']}"
-
-        if st.session_state.last_auto_command != current_key:
-            mqtt_set_auto_mode()
-
-            if auto_cmd == "OPEN":
-                ok, result = mqtt_open_rack()
-            else:
-                ok, result = mqtt_close_rack()
-
-            if ok:
-                st.session_state.last_auto_command = current_key
-
-                if auto_cmd == "OPEN":
-                    st.session_state.clothesline_state = "ĐANG MỞ"
-                elif auto_cmd == "CLOSE":
-                    st.session_state.clothesline_state = "ĐANG ĐÓNG"
-
-                st.session_state.last_manual_action = f"AI GỬI {auto_cmd}"
-                st.sidebar.success(f"Đã tự động gửi lệnh {auto_cmd}")
-            else:
-                st.sidebar.error(f"Không gửi được MQTT: {result}")
-        else:
-            st.sidebar.caption("Lệnh này đã được gửi, không gửi lặp lại.")
-
-
-# =========================
+# =========================================================
 # HEADER
-# =========================
+# =========================================================
 st.markdown(
     '<div class="main-title">IOT WEATHER DASHBOARD - HỆ THỐNG PHƠI ĐỒ THÔNG MINH</div>',
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 st.markdown(
-    f'<div class="sub-title">Nguồn dữ liệu: {data_source_name} | Cập nhật: {latest["time"]}</div>',
-    unsafe_allow_html=True
+    '<div class="sub-title">Dữ liệu cảm biến tự cập nhật theo từng phần, không refresh toàn trang.</div>',
+    unsafe_allow_html=True,
 )
 
 
-# =========================
-# LAYOUT
-# =========================
-left, right = st.columns([1.35, 1])
+# =========================================================
+# LIVE SENSOR SECTION - FRAGMENT
+# =========================================================
+st.markdown('<div class="section-title">DỮ LIỆU CẢM BIẾN REALTIME</div>', unsafe_allow_html=True)
+live_sensor_fragment()
 
-with left:
-    main_iot_weather_card(df, latest)
 
-with right:
-    c1, c2 = st.columns(2)
+# =========================================================
+# CONTROL SECTION - KHÔNG NẰM TRONG FRAGMENT
+# =========================================================
+st.markdown('<div class="section-title">ĐIỀU KHIỂN THỦ CÔNG</div>', unsafe_allow_html=True)
 
-    with c1:
-        metric_card(
-            "Nhiệt độ",
-            f'{float(latest["temperature"]):.1f}°C',
-            data_source_name,
-            "wi wi-thermometer",
-            "#f5a623",
-            clamp(float(latest["temperature"]) / 45 * 100)
-        )
+btn1, btn2, btn3 = st.columns(3)
 
-    with c2:
-        metric_card(
-            "Độ ẩm",
-            f'{float(latest["humidity"]):.0f}%',
-            data_source_name,
-            "wi wi-humidity",
-            "#5b83ff",
-            latest["humidity"]
-        )
+with btn1:
+    if st.button("MỞ DÀN PHƠI 90°", use_container_width=True, key="main_open"):
+        ok, result = mqtt_open_rack()
 
-    c3, c4 = st.columns(2)
+        if ok:
+            st.session_state.clothesline_state = "ĐANG MỞ"
+            st.session_state.last_manual_action = "MỞ DÀN PHƠI 90°"
+            st.success("Đã gửi lệnh mở dàn phơi")
+        else:
+            st.error(f"Không gửi được MQTT: {result}")
 
-    with c3:
-        metric_card(
-            "Áp suất",
-            f'{float(latest["pressure"]):.1f} hPa',
-            "BMP280",
-            "wi wi-barometer",
-            "#9a7dff",
-            clamp((float(latest["pressure"]) - 950) * 2)
-        )
+with btn2:
+    if st.button("ĐÓNG DÀN PHƠI 0°", use_container_width=True, key="main_close"):
+        ok, result = mqtt_close_rack()
 
-    with c4:
-        metric_card(
-            "Ánh sáng",
-            f'{float(latest["light"]):.0f} lux',
-            "Light sensor",
-            "wi wi-day-sunny",
-            "#f5a623",
-            clamp(float(latest["light"]) / 1000 * 100)
-        )
+        if ok:
+            st.session_state.clothesline_state = "ĐANG ĐÓNG"
+            st.session_state.last_manual_action = "ĐÓNG DÀN PHƠI 0°"
+            st.success("Đã gửi lệnh đóng dàn phơi")
+        else:
+            st.error(f"Không gửi được MQTT: {result}")
 
-    c5, c6 = st.columns(2)
+with btn3:
+    if st.button("MỞ CỬA MG90S", use_container_width=True, key="main_door_open"):
+        ok, result = mqtt_open_door()
 
-    with c5:
-        rain_text = "Có mưa" if int(latest["rain_sensor"]) == 1 else "Không mưa"
+        if ok:
+            st.session_state.door_state = "ĐANG MỞ"
+            st.session_state.last_manual_action = "MỞ CỬA MG90S"
+            st.success("Đã gửi lệnh mở cửa MG90S")
+        else:
+            st.error(f"Không gửi được MQTT: {result}")
 
-        metric_card(
-            "Cảm biến mưa",
-            rain_text,
-            f'Raw: {latest.get("rain_raw", 0)} | {latest.get("rain_state", "UNKNOWN")}',
-            "wi wi-raindrop",
-            "#43b36a" if int(latest["rain_sensor"]) == 0 else "#e74c3c",
-            100 if int(latest["rain_sensor"]) == 1 else 10
-        )
+st.info(f"Lệnh gần nhất: {st.session_state.last_manual_action}")
 
-    with c6:
-        pred = latest["ai_prediction"]
-        icon, color = weather_icon(pred)
 
-        metric_card(
-            "AI dự đoán",
-            pred,
-            "Nắng / Âm u / Mưa",
-            icon,
-            color,
-            80
-        )
+# =========================================================
+# AI CONTROL SECTION
+# =========================================================
+st.markdown('<div class="section-title">AI ĐIỀU KHIỂN DÀN PHƠI</div>', unsafe_allow_html=True)
 
-    c7, c8 = st.columns(2)
+latest = pd.Series(st.session_state.latest_data)
+auto_cmd, auto_reason = auto_decide_command(latest)
 
-    with c7:
-        gas_value = float(latest["gas"])
-        gas_alarm = bool(latest.get("gas_alarm", gas_value >= GAS_SAFE_LIMIT))
-        gas_status = "CẢNH BÁO" if gas_alarm else "AN TOÀN"
+ai_col1, ai_col2 = st.columns([2, 1])
 
-        metric_card(
-            "Gas MQ-5",
-            f"{gas_value:.0f}",
-            f"{gas_status} | Ngưỡng {GAS_SAFE_LIMIT}",
-            "wi wi-smoke",
-            "#e74c3c" if gas_alarm else "#43b36a",
-            clamp(gas_value / 1000 * 100)
-        )
+with ai_col1:
+    st.info(f"AI đề xuất: {auto_cmd}\n\nLý do: {auto_reason}")
 
-    with c8:
-        metric_card(
-            "Chế độ ESP",
-            str(latest.get("mode", "UNKNOWN")),
-            f'Period: {latest.get("period", "UNKNOWN")}',
-            "wi wi-time-3",
-            "#43b36a" if str(latest.get("mode", "")).upper() == "AUTO" else "#f5a623",
-            80
-        )
+with ai_col2:
+    if st.button("GỬI LỆNH THEO AI", use_container_width=True):
+        mqtt_set_auto_mode()
 
-    auto_cmd, auto_reason = auto_decide_command(latest)
-
-    if auto_cmd == "CLOSE":
-        control_color = "#e74c3c"
-        control_icon = "wi wi-rain"
-        control_text = f"ĐÓNG {SERVO_CLOSE_ANGLE}°"
-    else:
-        control_color = "#43b36a"
-        control_icon = "wi wi-day-sunny"
-        control_text = f"MỞ {SERVO_OPEN_ANGLE}°"
-
-    metric_card(
-        "AI điều khiển dàn phơi",
-        control_text,
-        auto_reason,
-        control_icon,
-        control_color,
-        100
-    )
-
-    st.markdown('<div class="section-title">TRẠNG THÁI THIẾT BỊ</div>', unsafe_allow_html=True)
-
-    state_col1, state_col2 = st.columns(2)
-
-    with state_col1:
-        clothes_color = "#43b36a" if st.session_state.clothesline_state == "ĐANG MỞ" else "#e74c3c"
-
-        status_card(
-            "Trạng thái dàn phơi",
-            st.session_state.clothesline_state,
-            f'ESP: {latest.get("rack_state", "UNKNOWN")}',
-            "wi wi-day-sunny" if st.session_state.clothesline_state == "ĐANG MỞ" else "wi wi-rain",
-            clothes_color
-        )
-
-    with state_col2:
-        door_color = "#43b36a" if st.session_state.door_state == "ĐANG MỞ" else "#e74c3c"
-
-        status_card(
-            "Trạng thái cửa",
-            st.session_state.door_state,
-            f'ESP: {latest.get("door_state", "UNKNOWN")}',
-            "wi wi-direction-up" if st.session_state.door_state == "ĐANG MỞ" else "wi wi-direction-down",
-            door_color
-        )
-
-    st.info(f"Lệnh gần nhất: {st.session_state.last_manual_action}")
-
-    st.markdown('<div class="section-title">ĐIỀU KHIỂN THỦ CÔNG</div>', unsafe_allow_html=True)
-
-    btn1, btn2, btn3 = st.columns(3)
-
-    with btn1:
-        if st.button("MỞ DÀN PHƠI 90°", use_container_width=True, key="main_open"):
-            mqtt_set_manual_mode()
+        if auto_cmd == "OPEN":
             ok, result = mqtt_open_rack()
-
-            if ok:
-                st.session_state.clothesline_state = "ĐANG MỞ"
-                st.session_state.last_manual_action = "MỞ DÀN PHƠI 90°"
-                st.success("Đã gửi lệnh mở dàn phơi")
-            else:
-                st.error(f"Không gửi được MQTT: {result}")
-
-    with btn2:
-        if st.button("ĐÓNG DÀN PHƠI 0°", use_container_width=True, key="main_close"):
-            mqtt_set_manual_mode()
+        else:
             ok, result = mqtt_close_rack()
 
-            if ok:
+        if ok:
+            if auto_cmd == "OPEN":
+                st.session_state.clothesline_state = "ĐANG MỞ"
+            else:
                 st.session_state.clothesline_state = "ĐANG ĐÓNG"
-                st.session_state.last_manual_action = "ĐÓNG DÀN PHƠI 0°"
-                st.success("Đã gửi lệnh đóng dàn phơi")
-            else:
-                st.error(f"Không gửi được MQTT: {result}")
 
-    with btn3:
-        if st.button("MỞ CỬA MG90S", use_container_width=True, key="main_door_open"):
-            mqtt_set_manual_mode()
-            ok, result = mqtt_open_door()
-
-            if ok:
-                st.session_state.door_state = "ĐANG MỞ"
-                st.session_state.last_manual_action = "MỞ CỬA MG90S"
-                st.success("Đã gửi lệnh mở cửa MG90S")
-            else:
-                st.error(f"Không gửi được MQTT: {result}")
+            st.session_state.last_manual_action = f"AI GỬI {auto_cmd}"
+            st.success(f"Đã gửi lệnh {auto_cmd}")
+        else:
+            st.error(f"Không gửi được MQTT: {result}")
 
 
-# =========================
-# BIG CHART
-# =========================
-render_big_temperature_chart(df)
+# =========================================================
+# CHART SECTION - FRAGMENT RIÊNG
+# =========================================================
+chart_fragment()
 
 
-# =========================
+# =========================================================
 # DATA TABLE
-# =========================
-with st.expander("Xem dữ liệu cảm biến"):
-    st.dataframe(df.tail(100), use_container_width=True)
+# =========================================================
+with st.expander("Xem dữ liệu cảm biến đã lưu trong phiên"):
+    if not st.session_state.live_df.empty:
+        st.dataframe(st.session_state.live_df.tail(100), use_container_width=True)
+    else:
+        st.write("Chưa có dữ liệu realtime trong phiên này.")
 
-if mqtt_payload is not None:
-    with st.expander("Xem payload MQTT mới nhất"):
-        st.json(mqtt_payload)
+with st.expander("Format payload MQTT cần nhận"):
+    st.code(
+        """
+{
+  "temperature": 28.45,
+  "humidity": 70.12,
+  "pressure_hpa": 1007.25,
+  "light_lux": 325.50,
+  "rain_raw": 4095,
+  "rain_state": "NO_RAIN",
+  "gas_raw": 1200,
+  "gas_alarm": false,
+  "rack_state": "OPEN",
+  "door_state": "CLOSE",
+  "mode": "AUTO",
+  "period": "SANG"
+}
+        """,
+        language="json",
+    )
