@@ -43,11 +43,20 @@ MQTT_DEVICE_ID = "esp32_clothesline_01"
 
 
 # =========================
-# SERVO CONFIG - MG90S
+# SERVO CONFIG - DÀN PHƠI
 # =========================
 SERVO_NAME = "MG90S"
 SERVO_OPEN_ANGLE = 90
 SERVO_CLOSE_ANGLE = 0
+
+
+# =========================
+# SERVO CONFIG - CỬA
+# =========================
+DOOR_SERVO_NAME = "MG90S"
+DOOR_COMMAND = "MSG40"
+DOOR_OPEN_ANGLE = 90
+DOOR_ACTION = "Mở cửa bằng servo MG90S"
 
 
 # =========================
@@ -260,23 +269,35 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
     if command == "OPEN":
         target_angle = SERVO_OPEN_ANGLE
         action_text = "Mở dàn phơi"
+        target_device = "clothesline_servo"
+        servo_name = SERVO_NAME
+
     elif command == "CLOSE":
         target_angle = SERVO_CLOSE_ANGLE
         action_text = "Đóng / thu dàn phơi"
+        target_device = "clothesline_servo"
+        servo_name = SERVO_NAME
+
+    elif command == "MSG40":
+        target_angle = 90
+        action_text = "Mở cửa bằng servo MG90S"
+        target_device = "door_servo"
+        servo_name = "MG90S"
+
     else:
         return False, "Lệnh không hợp lệ"
 
-    payload = {
+        payload = {
         "device": cfg["device_id"],
+        "target": target_device,
         "command": command,
         "angle": target_angle,
-        "servo": SERVO_NAME,
+        "servo": servo_name,
         "action": action_text,
         "source": "streamlit",
         "reason": reason,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
-
     try:
         connected = {"ok": False, "rc": None}
 
@@ -483,15 +504,26 @@ def main_iot_weather_card(df, latest):
 
     auto_cmd, auto_reason = auto_decide_command(latest)
 
-    if auto_cmd == "CLOSE":
-        action = "ĐÓNG DÀN PHƠI"
-        action_color = "#e74c3c"
-    elif auto_cmd == "OPEN":
-        action = "MỞ DÀN PHƠI"
-        action_color = "#43b36a"
+    if command == "OPEN":
+        target_angle = SERVO_OPEN_ANGLE
+        action_text = "Mở dàn phơi"
+        target_device = "clothesline_servo"
+        servo_name = SERVO_NAME
+
+    elif command == "CLOSE":
+        target_angle = SERVO_CLOSE_ANGLE
+        action_text = "Đóng / thu dàn phơi"
+        target_device = "clothesline_servo"
+        servo_name = SERVO_NAME
+
+    elif command == "MSG40":
+        target_angle = DOOR_OPEN_ANGLE
+        action_text = DOOR_ACTION
+        target_device = "door_servo"
+        servo_name = DOOR_SERVO_NAME
+
     else:
-        action = "GIỮ NGUYÊN"
-        action_color = "#f5a623"
+        return False, "Lệnh không hợp lệ"
 
     daily_boxes = ""
 
@@ -1159,7 +1191,7 @@ with right:
         unsafe_allow_html=True
     )
 
-    btn1, btn2 = st.columns(2)
+    btn1, btn2, btn3 = st.columns(3)
 
     with btn1:
         if st.button("MỞ DÀN PHƠI 90°", use_container_width=True, key="main_open"):
@@ -1167,24 +1199,35 @@ with right:
                 "OPEN",
                 "Người dùng bấm mở dàn phơi 90 độ trên dashboard"
             )
-
+    
             if ok:
                 st.success("Đã gửi lệnh mở dàn phơi 90°")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
-
+    
     with btn2:
         if st.button("ĐÓNG DÀN PHƠI 0°", use_container_width=True, key="main_close"):
             ok, result = mqtt_publish(
                 "CLOSE",
                 "Người dùng bấm đóng dàn phơi về 0 độ trên dashboard"
             )
-
+    
             if ok:
                 st.success("Đã gửi lệnh đóng dàn phơi 0°")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
-
+    
+    with btn3:
+        if st.button("MỞ CỬA MG90S", use_container_width=True, key="main_msg40"):
+            ok, result = mqtt_publish(
+                "MSG40",
+                "Người dùng bấm mở cửa bằng servo MG90S trên dashboard"
+            )
+    
+            if ok:
+                st.success("Đã gửi lệnh MSG40 - mở cửa MG90S 90°")
+            else:
+                st.error(f"Không gửi được MQTT: {result}")
 
 # =========================
 # BIG CHART
