@@ -239,6 +239,7 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         "topic": cfg["topic_cmd"],
         "tls": cfg["tls"],
         "username": cfg["username"],
+        "password_length": len(cfg["password"]),
         "payload": payload
     }
 
@@ -273,7 +274,6 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
 
         client.loop_start()
 
-        # Chờ kết nối thật sự
         start_time = time.time()
         while connected["rc"] is None and time.time() - start_time < 5:
             time.sleep(0.1)
