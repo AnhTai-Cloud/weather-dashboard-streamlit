@@ -6,13 +6,40 @@ from streamlit.components.v1 import html
 
 
 # =========================
-# PAGE CONFIG
+# STREAMLIT PAGE CONFIG
 # =========================
 st.set_page_config(
-    page_title="IoT Smart Clothesline Dashboard",
+    page_title="IoT Weather Dashboard",
     page_icon="🌦️",
     layout="wide",
     initial_sidebar_state="collapsed",
+)
+
+st.markdown(
+    """
+    <style>
+        .block-container {
+            padding-top: 0.8rem !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            padding-bottom: 0rem !important;
+            max-width: 100% !important;
+        }
+
+        header {
+            visibility: hidden;
+        }
+
+        footer {
+            visibility: hidden;
+        }
+
+        iframe {
+            border: none !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -26,14 +53,14 @@ AI_API_BASE = "https://weather-model-api.onrender.com"
 # MQTT WEBSOCKET CONFIG
 # =========================
 MQTT_BROKER_HOST = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
-
 MQTT_WS_PORT = 8884
 MQTT_WS_PATH = "/mqtt"
 
 MQTT_USERNAME = "ESP32-client"
 
-# Đổi lại mật khẩu MQTT của bạn ở đây
-MQTT_PASSWORD = "Tan01052005!"
+# Khuyến nghị: đặt MQTT_PASSWORD trong Streamlit Secrets.
+# Nếu chưa dùng secrets thì thay YOUR_MQTT_PASSWORD bằng mật khẩu thật của bạn.
+MQTT_PASSWORD = st.secrets["MQTT_PASSWORD"] if "MQTT_PASSWORD" in st.secrets else "YOUR_MQTT_PASSWORD"
 
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
 MQTT_TOPIC_CONTROL_RACK = "smart_home/control/rack"
@@ -51,7 +78,6 @@ html_template = Template(r"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
-
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -61,63 +87,136 @@ html_template = Template(r"""
             font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif;
         }
 
-        body {
+        html, body {
             margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
             background: #eef0f3;
             color: #2f3341;
+            overflow-x: hidden;
         }
 
         .page {
-            max-width: 1320px;
-            margin: 0 auto;
-            padding: 18px 18px 34px 18px;
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 18px 18px 32px 18px;
         }
 
-        .topbar {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 16px;
+        .hero {
+            background: linear-gradient(135deg, #f7f1ea 0%, #eef3ff 100%);
+            border-radius: 30px;
+            padding: 22px 24px;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.06);
+            margin-bottom: 18px;
+            display: grid;
+            grid-template-columns: 1.7fr 1fr;
+            gap: 18px;
+            align-items: center;
         }
 
         .title {
-            font-size: 30px;
-            font-weight: 850;
-            line-height: 1.25;
+            font-size: 32px;
+            font-weight: 900;
+            line-height: 1.2;
             text-transform: uppercase;
+            letter-spacing: -0.6px;
         }
 
-        .subtitle {
-            color: #74777f;
-            font-size: 14px;
-            margin-top: 5px;
+        .hero-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
         }
 
-        .mqtt-status {
-            min-width: 250px;
-            text-align: right;
-        }
-
-        .badge {
-            display: inline-block;
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
             border-radius: 999px;
-            padding: 8px 13px;
-            font-weight: 800;
+            padding: 9px 13px;
+            background: rgba(255,255,255,0.85);
+            color: #535866;
             font-size: 13px;
+            font-weight: 800;
+        }
+
+        .pill-ok {
             color: white;
-        }
-
-        .badge-wait {
-            background: #f5a623;
-        }
-
-        .badge-ok {
             background: #43b36a;
         }
 
-        .badge-error {
+        .pill-wait {
+            color: white;
+            background: #f5a623;
+        }
+
+        .pill-error {
+            color: white;
             background: #e74c3c;
+        }
+
+        .hero-ai {
+            background: rgba(255,255,255,0.76);
+            border-radius: 24px;
+            padding: 18px 18px;
+            min-height: 142px;
+        }
+
+        .hero-ai-title {
+            font-size: 14px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #74777f;
+        }
+
+        .hero-ai-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .hero-ai-value {
+            font-size: 34px;
+            font-weight: 950;
+            letter-spacing: -0.7px;
+        }
+
+        .hero-ai-icon {
+            width: 66px;
+            height: 66px;
+            border-radius: 22px;
+            background: #fff7e8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .hero-ai-icon i {
+            font-size: 34px;
+            color: #f5a623;
+        }
+
+        .hero-ai-sub {
+            margin-top: 10px;
+            color: #2f4a8a;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1.45;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin: 22px 0 13px 0;
+            color: #2f3341;
+            letter-spacing: -0.3px;
         }
 
         .grid {
@@ -135,33 +234,36 @@ html_template = Template(r"""
         }
 
         .card {
-            background: #f3eee8;
-            border-radius: 24px;
+            background: #f7f1ea;
+            border-radius: 26px;
             padding: 18px 20px;
-            min-height: 160px;
-            box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+            min-height: 158px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.045);
         }
 
         .card-head {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
         }
 
         .card-title {
-            font-size: 15px;
-            font-weight: 850;
+            font-size: 14px;
+            font-weight: 900;
             text-transform: uppercase;
+            color: #3c4050;
         }
 
         .icon-box {
             width: 48px;
             height: 48px;
-            border-radius: 16px;
-            background: rgba(255,255,255,0.85);
+            border-radius: 17px;
+            background: rgba(255,255,255,0.88);
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
         }
 
         .icon-box i {
@@ -169,16 +271,18 @@ html_template = Template(r"""
         }
 
         .value {
-            font-size: 30px;
-            font-weight: 850;
+            font-size: 31px;
+            font-weight: 900;
             margin-top: 14px;
             word-break: break-word;
+            letter-spacing: -0.6px;
         }
 
         .desc {
             color: #74777f;
             font-size: 13px;
             margin-top: 4px;
+            font-weight: 650;
         }
 
         .progress-wrap {
@@ -187,7 +291,7 @@ html_template = Template(r"""
             background: #ded8d1;
             border-radius: 999px;
             overflow: hidden;
-            margin-top: 14px;
+            margin-top: 15px;
         }
 
         .progress-fill {
@@ -196,19 +300,110 @@ html_template = Template(r"""
             transition: width 0.25s ease, background 0.25s ease;
         }
 
-        .section-title {
-            font-size: 23px;
-            font-weight: 850;
-            text-transform: uppercase;
-            margin: 24px 0 14px 0;
-            color: #2f3341;
+        .forecast-card {
+            background: #f7f1ea;
+            border-radius: 28px;
+            padding: 18px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.045);
+            margin-bottom: 16px;
         }
 
-        .control-card {
-            background: #f3eee8;
+        .forecast-top {
+            display: grid;
+            grid-template-columns: 1.2fr 2fr;
+            gap: 14px;
+            align-items: stretch;
+        }
+
+        .current-weather {
+            background: rgba(255,255,255,0.72);
             border-radius: 24px;
-            padding: 18px 20px;
-            box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+            padding: 18px;
+            min-height: 180px;
+        }
+
+        .current-location {
+            font-size: 15px;
+            font-weight: 900;
+            color: #3c4050;
+        }
+
+        .current-main {
+            margin-top: 18px;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .current-main i {
+            font-size: 56px;
+            color: #f5a623;
+        }
+
+        .current-temp {
+            font-size: 48px;
+            font-weight: 950;
+            letter-spacing: -1px;
+        }
+
+        .current-label {
+            margin-top: 6px;
+            font-size: 17px;
+            font-weight: 850;
+            color: #3c4050;
+        }
+
+        .daily-list {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .day-item {
+            background: rgba(255,255,255,0.72);
+            border-radius: 24px;
+            padding: 16px 12px;
+            min-height: 180px;
+            text-align: center;
+        }
+
+        .day-name {
+            font-size: 14px;
+            font-weight: 900;
+            color: #3c4050;
+        }
+
+        .day-date {
+            margin-top: 4px;
+            font-size: 12px;
+            font-weight: 750;
+            color: #7a7f8c;
+        }
+
+        .day-icon {
+            margin-top: 14px;
+            font-size: 34px;
+            color: #f5a623;
+        }
+
+        .day-temp {
+            margin-top: 14px;
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+        .day-rain {
+            margin-top: 5px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #5b83ff;
+        }
+
+        .control-card, .chart-card {
+            background: #f7f1ea;
+            border-radius: 28px;
+            padding: 20px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.045);
             margin-bottom: 16px;
         }
 
@@ -230,7 +425,7 @@ html_template = Template(r"""
             border-radius: 18px;
             padding: 15px 12px;
             font-size: 15px;
-            font-weight: 850;
+            font-weight: 900;
             cursor: pointer;
             color: white;
             transition: transform 0.12s ease, opacity 0.12s ease;
@@ -238,7 +433,7 @@ html_template = Template(r"""
 
         button:hover {
             transform: translateY(-1px);
-            opacity: 0.92;
+            opacity: 0.93;
         }
 
         button:disabled {
@@ -270,59 +465,58 @@ html_template = Template(r"""
         .info-line {
             background: #e8eefc;
             color: #2f4a8a;
-            border-radius: 16px;
+            border-radius: 17px;
             padding: 12px 14px;
             font-size: 14px;
-            font-weight: 750;
+            font-weight: 800;
             margin-top: 12px;
-        }
-
-        .chart-card {
-            background: #f3eee8;
-            border-radius: 28px;
-            padding: 20px 20px 10px 20px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.055);
-            margin-bottom: 16px;
         }
 
         .raw-box {
             background: #20242c;
             color: #dbe6ff;
-            border-radius: 18px;
-            padding: 14px;
+            border-radius: 22px;
+            padding: 16px;
             overflow: auto;
             max-height: 260px;
             font-size: 13px;
             white-space: pre-wrap;
+            margin-bottom: 10px;
         }
 
-        .small-note {
-            color: #74777f;
-            font-size: 13px;
-            line-height: 1.5;
-        }
+        @media (max-width: 1150px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
 
-        @media (max-width: 1050px) {
+            .forecast-top {
+                grid-template-columns: 1fr;
+            }
+
             .grid {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
-            .button-row {
-                grid-template-columns: 1fr;
+            .daily-list {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
             }
         }
 
-        @media (max-width: 650px) {
-            .grid, .grid-2, .button-row, .button-row-2 {
+        @media (max-width: 700px) {
+            .page {
+                padding: 12px 10px 26px 10px;
+            }
+
+            .title {
+                font-size: 24px;
+            }
+
+            .grid, .grid-2, .button-row, .button-row-2, .daily-list {
                 grid-template-columns: 1fr;
             }
 
-            .topbar {
-                flex-direction: column;
-            }
-
-            .mqtt-status {
-                text-align: left;
+            .hero-ai-value {
+                font-size: 28px;
             }
         }
     </style>
@@ -331,23 +525,59 @@ html_template = Template(r"""
 <body>
 <div class="page">
 
-    <div class="topbar">
+    <div class="hero">
         <div>
-            <div class="title">IOT WEATHER DASHBOARD - HỆ THỐNG PHƠI ĐỒ THÔNG MINH</div>
-            <div class="subtitle">
-                Dữ liệu cập nhật trực tiếp bằng MQTT WebSocket, không refresh Streamlit.
-                <br>
-                Cập nhật cuối: <span id="lastUpdate">--</span>
+            <div class="title">IOT WEATHER DASHBOARD<br>HỆ THỐNG PHƠI ĐỒ THÔNG MINH</div>
+            <div class="hero-meta">
+                <div id="mqttBadge" class="pill pill-wait">Đang kết nối MQTT</div>
+                <div class="pill">Cập nhật: <span id="lastUpdate">--</span></div>
+                <div class="pill">Chế độ: <span id="heroMode">--</span></div>
             </div>
         </div>
 
-        <div class="mqtt-status">
-            <div id="mqttBadge" class="badge badge-wait">ĐANG KẾT NỐI MQTT...</div>
-            <div class="subtitle" id="mqttDetail">Broker: --</div>
+        <div class="hero-ai">
+            <div class="hero-ai-title">Dự báo hệ thống</div>
+            <div class="hero-ai-main">
+                <div>
+                    <div class="hero-ai-value" id="aiPrediction">--</div>
+                    <div class="hero-ai-sub" id="aiDecision">Khuyến nghị: --</div>
+                </div>
+                <div class="hero-ai-icon">
+                    <i class="wi wi-day-cloudy" id="aiIcon"></i>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="section-title">Dữ liệu cảm biến realtime</div>
+    <div class="section-title">Dự báo thời tiết</div>
+
+    <div class="forecast-card">
+        <div class="forecast-top">
+            <div class="current-weather">
+                <div class="current-location" id="forecastLocation">Hanoi, Vietnam</div>
+                <div class="current-main">
+                    <i id="currentIcon" class="wi wi-day-sunny"></i>
+                    <div>
+                        <div class="current-temp" id="currentTemp">--°C</div>
+                        <div class="current-label" id="currentWeather">--</div>
+                    </div>
+                </div>
+                <div class="desc" id="currentMore">Độ ẩm: -- | Áp suất: --</div>
+            </div>
+
+            <div class="daily-list" id="dailyForecast">
+                <div class="day-item">
+                    <div class="day-name">--</div>
+                    <div class="day-date">--</div>
+                    <div class="day-icon"><i class="wi wi-day-cloudy"></i></div>
+                    <div class="day-temp">-- / --</div>
+                    <div class="day-rain">Mưa: --</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title">Dữ liệu cảm biến</div>
 
     <div class="grid">
         <div class="card">
@@ -414,50 +644,26 @@ html_template = Template(r"""
 
         <div class="card">
             <div class="card-head">
-                <div class="card-title">AI dự đoán</div>
-                <div class="icon-box"><i class="wi wi-day-cloudy" id="aiIcon" style="color:#f5a623;"></i></div>
-            </div>
-            <div class="value" id="aiPrediction">--</div>
-            <div class="desc">Nắng / Âm u / Mưa</div>
-            <div class="progress-wrap"><div id="aiBar" class="progress-fill" style="width:80%; background:#f5a623;"></div></div>
-        </div>
-
-        <div class="card">
-            <div class="card-head">
-                <div class="card-title">Chế độ ESP</div>
-                <div class="icon-box"><i class="wi wi-time-3" style="color:#9a7dff;"></i></div>
-            </div>
-            <div class="value" id="mode">--</div>
-            <div class="desc">Period: <span id="period">--</span></div>
-            <div class="progress-wrap"><div id="modeBar" class="progress-fill" style="width:80%; background:#9a7dff;"></div></div>
-        </div>
-    </div>
-
-    <div class="section-title">Trạng thái thiết bị</div>
-
-    <div class="grid-2">
-        <div class="card">
-            <div class="card-head">
-                <div class="card-title">Trạng thái dàn phơi</div>
+                <div class="card-title">Dàn phơi</div>
                 <div class="icon-box"><i class="wi wi-day-sunny" id="rackIcon" style="color:#e74c3c;"></i></div>
             </div>
             <div class="value" id="rackState">ĐANG ĐÓNG</div>
-            <div class="desc">ESP rack_state: <span id="rackRaw">--</span></div>
+            <div class="desc">Trạng thái: <span id="rackRaw">--</span></div>
             <div class="progress-wrap"><div id="rackBar" class="progress-fill" style="width:100%; background:#e74c3c;"></div></div>
         </div>
 
         <div class="card">
             <div class="card-head">
-                <div class="card-title">Trạng thái cửa</div>
+                <div class="card-title">Cửa</div>
                 <div class="icon-box"><i class="wi wi-direction-down" id="doorIcon" style="color:#e74c3c;"></i></div>
             </div>
             <div class="value" id="doorState">ĐANG ĐÓNG</div>
-            <div class="desc">ESP door_state: <span id="doorRaw">--</span></div>
+            <div class="desc">Trạng thái: <span id="doorRaw">--</span></div>
             <div class="progress-wrap"><div id="doorBar" class="progress-fill" style="width:100%; background:#e74c3c;"></div></div>
         </div>
     </div>
 
-    <div class="section-title">Điều khiển MQTT</div>
+    <div class="section-title">Điều khiển</div>
 
     <div class="control-card">
         <div class="button-row">
@@ -472,28 +678,21 @@ html_template = Template(r"""
         </div>
 
         <div class="button-row-2">
-            <button class="btn-ai" id="btnAiSend">GỬI LỆNH THEO AI</button>
+            <button class="btn-ai" id="btnAiSend">GỬI LỆNH THEO DỰ BÁO</button>
             <button class="btn-close" id="btnCloseDoor">ĐÓNG CỬA MG90S</button>
         </div>
 
         <div class="info-line" id="lastCommand">Lệnh gần nhất: Chưa có lệnh</div>
-        <div class="info-line" id="aiDecision">AI đề xuất: --</div>
     </div>
 
-    <div class="section-title">Biểu đồ nhiệt độ realtime</div>
+    <div class="section-title">Biểu đồ nhiệt độ</div>
 
     <div class="chart-card">
-        <canvas id="tempChart" height="110"></canvas>
+        <canvas id="tempChart" height="105"></canvas>
     </div>
 
-    <div class="section-title">Payload MQTT mới nhất</div>
+    <div class="section-title">Payload mới nhất</div>
     <pre class="raw-box" id="rawPayload">Chưa có payload...</pre>
-
-    <div class="small-note">
-        Dashboard nhận dữ liệu từ MQTT topic <b>smart_home/sensor/data</b>,
-        sau đó tự gửi sang Render API để lưu lịch sử và dự đoán AI.
-        Nếu tắt dashboard thì dữ liệu MQTT sẽ không được chuyển sang API.
-    </div>
 
 </div>
 
@@ -513,8 +712,10 @@ let mqttClient = null;
 let latestData = null;
 let lastAiCommand = "CLOSE";
 let lastPredictTime = 0;
+let lastForecastTime = 0;
 
 const PREDICT_INTERVAL_MS = 30 * 60 * 1000;
+const FORECAST_INTERVAL_MS = 30 * 60 * 1000;
 
 const tempLabels = [];
 const tempValues = [];
@@ -536,7 +737,7 @@ function nowText() {
 
 function setBadge(text, cls) {
     const badge = el("mqttBadge");
-    badge.className = "badge " + cls;
+    badge.className = "pill " + cls;
     badge.innerText = text;
 }
 
@@ -548,14 +749,26 @@ function setProgress(id, percent, color) {
     }
 }
 
+function iconClass(iconName) {
+    if (iconName === "sunny") return "wi wi-day-sunny";
+    if (iconName === "partly_cloudy") return "wi wi-day-cloudy";
+    if (iconName === "cloudy") return "wi wi-cloudy";
+    if (iconName === "fog") return "wi wi-fog";
+    if (iconName === "drizzle") return "wi wi-sprinkle";
+    if (iconName === "rain") return "wi wi-rain";
+    if (iconName === "snow") return "wi wi-snow";
+    if (iconName === "thunderstorm") return "wi wi-thunderstorm";
+    return "wi wi-day-cloudy";
+}
+
 function updateAiIcon(label) {
     const icon = el("aiIcon");
 
-    if (label === "Mưa") {
+    if (label === "Mưa" || label === "Mưa rào" || label === "Dông") {
         icon.className = "wi wi-rain";
         icon.style.color = "#5b83ff";
         setProgress("aiBar", 85, "#5b83ff");
-    } else if (label === "Âm u") {
+    } else if (label === "Âm u" || label === "Ít mây") {
         icon.className = "wi wi-cloudy";
         icon.style.color = "#f5a623";
         setProgress("aiBar", 70, "#f5a623");
@@ -633,16 +846,7 @@ function updateMode(data) {
     const mode = String(data.mode || "UNKNOWN").toUpperCase();
     const period = String(data.period || "UNKNOWN").toUpperCase();
 
-    el("mode").innerText = mode;
-    el("period").innerText = period;
-
-    if (mode === "AUTO") {
-        setProgress("modeBar", 90, "#43b36a");
-    } else if (mode === "MANUAL") {
-        setProgress("modeBar", 70, "#f5a623");
-    } else {
-        setProgress("modeBar", 40, "#9a7dff");
-    }
+    el("heroMode").innerText = mode + " / " + period;
 }
 
 function updateCards(data) {
@@ -745,10 +949,7 @@ function publish(topic, message, successText) {
         retain: false
     });
 
-    el("lastCommand").innerText =
-        "Lệnh gần nhất: " + successText +
-        " | Topic: " + topic +
-        " | Message: " + message;
+    el("lastCommand").innerText = "Lệnh gần nhất: " + successText;
 }
 
 function setButtonsDisabled(disabled) {
@@ -780,13 +981,11 @@ function normalizeForApi(data) {
 
     return {
         time: data.time || new Date().toISOString(),
-
         temperature: Number(data.temperature || 0),
         humidity: Number(data.humidity || 0),
         pressure: Number(data.pressure_hpa || data.pressure || 0),
         light: Number(data.light_lux || data.light || 0),
         rain: rainValue,
-
         gas: Number(data.gas_raw || data.gas || 0),
         rain_raw: data.rain_raw ?? null,
         rain_state: data.rain_state || null,
@@ -810,13 +1009,10 @@ async function sendIngestToApi(data) {
             body: JSON.stringify(payload)
         });
 
-        const json = await res.json();
-        console.log("Ingest API:", json);
-
-        return json;
+        return await res.json();
     } catch (err) {
         console.error("Ingest API error:", err);
-        el("aiDecision").innerText = "Lỗi gửi dữ liệu lên AI API: " + err.message;
+        el("aiDecision").innerText = "Khuyến nghị: lỗi gửi dữ liệu";
         return null;
     }
 }
@@ -842,11 +1038,10 @@ async function callPredictApi(force = false) {
         });
 
         const json = await res.json();
-        console.log("Predict API:", json);
 
         if (!json.ok) {
-            el("aiPrediction").innerText = "Chưa đủ dữ liệu";
-            el("aiDecision").innerText = json.error || "AI chưa dự đoán được";
+            el("aiPrediction").innerText = "Đang chờ";
+            el("aiDecision").innerText = "Khuyến nghị: chưa đủ dữ liệu";
             return;
         }
 
@@ -856,20 +1051,65 @@ async function callPredictApi(force = false) {
         lastAiCommand = json.command;
 
         const rainPercent = Number(json.rain_probability || 0) * 100;
-        const meteoText =
-            json.source_info && json.source_info.used_meteo
-                ? "Có bù Meteo"
-                : "Không bù Meteo";
+        const commandText = json.command === "OPEN" ? "MỞ" : "ĐÓNG";
 
         el("aiDecision").innerText =
-            "AI thật: " + json.prediction +
-            " | Lệnh: " + json.command +
-            " | Xác suất mưa: " + rainPercent.toFixed(1) + "%" +
-            " | " + meteoText;
+            "Khuyến nghị: " + commandText +
+            " | Khả năng mưa: " + rainPercent.toFixed(1) + "%";
 
     } catch (err) {
         console.error("Predict API error:", err);
-        el("aiDecision").innerText = "Lỗi gọi AI API: " + err.message;
+        el("aiDecision").innerText = "Khuyến nghị: lỗi dự báo";
+    }
+}
+
+async function loadForecast(force = false) {
+    const now = Date.now();
+
+    if (!force && now - lastForecastTime < FORECAST_INTERVAL_MS) {
+        return;
+    }
+
+    lastForecastTime = now;
+
+    try {
+        const res = await fetch(AI_API_BASE + "/forecast?days=5");
+        const json = await res.json();
+
+        if (!json.ok) {
+            return;
+        }
+
+        el("forecastLocation").innerText = json.location || "Hanoi, Vietnam";
+
+        const current = json.current || {};
+        el("currentTemp").innerText = Number(current.temperature || 0).toFixed(0) + "°C";
+        el("currentWeather").innerText = current.weather || "--";
+        el("currentMore").innerText =
+            "Độ ẩm: " + Number(current.humidity || 0).toFixed(0) + "% | " +
+            "Áp suất: " + Number(current.pressure || 0).toFixed(1) + " hPa";
+
+        el("currentIcon").className = iconClass(current.icon);
+
+        const daily = json.daily || [];
+        let html = "";
+
+        daily.slice(0, 5).forEach(function(day) {
+            html += `
+                <div class="day-item">
+                    <div class="day-name">${day.day_name || "--"}</div>
+                    <div class="day-date">${day.date || "--"}</div>
+                    <div class="day-icon"><i class="${iconClass(day.icon)}"></i></div>
+                    <div class="day-temp">${Number(day.temp_max || 0).toFixed(0)}° / ${Number(day.temp_min || 0).toFixed(0)}°</div>
+                    <div class="day-rain">Mưa: ${Number(day.rain_probability || 0).toFixed(0)}%</div>
+                </div>
+            `;
+        });
+
+        el("dailyForecast").innerHTML = html;
+
+    } catch (err) {
+        console.error("Forecast API error:", err);
     }
 }
 
@@ -896,24 +1136,24 @@ function setupButtons() {
 
     el("btnManual").addEventListener("click", function() {
         publish(TOPIC_MODE, "MANUAL", "CHUYỂN MANUAL");
-        el("mode").innerText = "MANUAL";
+        el("heroMode").innerText = "MANUAL";
     });
 
     el("btnAuto").addEventListener("click", function() {
         publish(TOPIC_MODE, "AUTO", "CHUYỂN AUTO");
-        el("mode").innerText = "AUTO";
+        el("heroMode").innerText = "AUTO";
     });
 
     el("btnAiSend").addEventListener("click", async function() {
-        publish(TOPIC_MODE, "AUTO", "CHUYỂN AUTO THEO AI");
+        publish(TOPIC_MODE, "AUTO", "CHUYỂN AUTO THEO DỰ BÁO");
 
         await callPredictApi(true);
 
         if (lastAiCommand === "OPEN") {
-            publish(TOPIC_RACK, "OPEN", "AI GỬI OPEN");
+            publish(TOPIC_RACK, "OPEN", "DỰ BÁO GỬI OPEN");
             updateRackState("OPEN");
         } else {
-            publish(TOPIC_RACK, "CLOSE", "AI GỬI CLOSE");
+            publish(TOPIC_RACK, "CLOSE", "DỰ BÁO GỬI CLOSE");
             updateRackState("CLOSE");
         }
     });
@@ -921,8 +1161,6 @@ function setupButtons() {
 
 function connectMqtt() {
     setButtonsDisabled(true);
-
-    el("mqttDetail").innerText = "Broker: " + MQTT_WS_URL;
 
     const options = {
         username: MQTT_USERNAME,
@@ -936,8 +1174,7 @@ function connectMqtt() {
     mqttClient = mqtt.connect(MQTT_WS_URL, options);
 
     mqttClient.on("connect", function() {
-        setBadge("ĐÃ KẾT NỐI MQTT WEBSOCKET", "badge-ok");
-        el("mqttDetail").innerText = "Đã subscribe: " + TOPIC_SENSOR;
+        setBadge("MQTT online", "pill-ok");
 
         mqttClient.subscribe(TOPIC_SENSOR, {
             qos: 0
@@ -947,18 +1184,17 @@ function connectMqtt() {
     });
 
     mqttClient.on("reconnect", function() {
-        setBadge("ĐANG KẾT NỐI LẠI...", "badge-wait");
+        setBadge("Đang kết nối lại", "pill-wait");
         setButtonsDisabled(true);
     });
 
     mqttClient.on("close", function() {
-        setBadge("MẤT KẾT NỐI MQTT", "badge-error");
+        setBadge("MQTT offline", "pill-error");
         setButtonsDisabled(true);
     });
 
     mqttClient.on("error", function(err) {
-        setBadge("LỖI MQTT", "badge-error");
-        el("mqttDetail").innerText = "Lỗi: " + err.message;
+        setBadge("Lỗi MQTT", "pill-error");
         console.error(err);
     });
 
@@ -968,10 +1204,9 @@ function connectMqtt() {
             const data = JSON.parse(text);
 
             updateCards(data);
-
             await sendIngestToApi(data);
-
             await callPredictApi(false);
+            await loadForecast(false);
 
         } catch (e) {
             console.error("Payload parse error:", e);
@@ -983,6 +1218,8 @@ function connectMqtt() {
 
 setupButtons();
 connectMqtt();
+loadForecast(true);
+callPredictApi(true);
 </script>
 
 </body>
@@ -1001,4 +1238,4 @@ html_code = html_template.substitute(
     AI_API_BASE=json.dumps(AI_API_BASE),
 )
 
-html(html_code, height=1200, scrolling=True)
+html(html_code, height=1750, scrolling=False)
