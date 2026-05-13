@@ -8,6 +8,7 @@ import ssl
 import paho.mqtt.client as mqtt
 from datetime import datetime, timedelta
 from streamlit.components.v1 import html as components_html
+from streamlit_autorefresh import st_autorefresh
 
 
 # =========================
@@ -22,6 +23,15 @@ st.set_page_config(
 
 
 # =========================
+# AUTO REFRESH
+# =========================
+st_autorefresh(
+    interval=5000,
+    key="mqtt_auto_refresh"
+)
+
+
+# =========================
 # FALLBACK DATA SOURCE
 # =========================
 DATA_SOURCE = "data.csv"
@@ -30,7 +40,6 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - HIVEMQ CLOUD
 # =========================
-# Sửa 3 dòng này đúng với HiveMQ Cloud của bạn
 MQTT_BROKER = "NHAP_BROKER_HIVEMQ_CUA_BAN"
 MQTT_PORT = 8883
 
@@ -39,10 +48,7 @@ MQTT_PASSWORD = "NHAP_PASSWORD_HIVEMQ"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 
-# Topic ESP publish dữ liệu cảm biến
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
-
-# Topic web gửi lệnh xuống ESP
 MQTT_TOPIC_CONTROL_RACK = "smart_home/control/rack"
 MQTT_TOPIC_CONTROL_DOOR = "smart_home/control/door"
 MQTT_TOPIC_CONTROL_MODE = "smart_home/control/mode"
@@ -281,11 +287,6 @@ def create_mqtt_client(suffix):
 
 
 def mqtt_get_latest_sensor_data(timeout_sec=4):
-    """
-    Subscribe topic smart_home/sensor/data trong vài giây để lấy payload mới nhất.
-    ESP nên publish retained để web nhận được ngay.
-    """
-
     result = {
         "payload": None,
         "error": None,
@@ -332,11 +333,6 @@ def mqtt_get_latest_sensor_data(timeout_sec=4):
 
 
 def mqtt_publish_control(topic, message):
-    """
-    Publish text command xuống ESP.
-    ESP đang cần message text: OPEN / CLOSE / AUTO / MANUAL.
-    """
-
     try:
         connected = {
             "ok": False,
@@ -1135,31 +1131,8 @@ if mqtt_payload is not None:
         st.json(mqtt_payload)
 else:
     st.sidebar.warning("Chưa nhận được payload từ ESP32")
-    st.sidebar.caption("Kiểm tra ESP có publish retained lên smart_home/sensor/data chưa.")
+    st.sidebar.caption("ESP nên publish retained lên smart_home/sensor/data")
 
-st.sidebar.markdown("---")
-st.sidebar.write("Format payload cần nhận:")
-st.sidebar.code("""
-{
-  "temperature": 28.45,
-  "humidity": 70.12,
-  "pressure_hpa": 1007.25,
-  "light_lux": 325.50,
-  "rain_raw": 4095,
-  "rain_state": "NO_RAIN",
-  "gas_raw": 1200,
-  "gas_alarm": false,
-  "rack_state": "OPEN",
-  "door_state": "CLOSE",
-  "mode": "AUTO",
-  "period": "SANG"
-}
-""")
-
-
-# =========================
-# MQTT CONTROL SIDEBAR
-# =========================
 st.sidebar.markdown("---")
 st.sidebar.subheader("📡 ĐIỀU KHIỂN MQTT")
 
@@ -1218,7 +1191,7 @@ if st.sidebar.button("MỞ CỬA MG90S", use_container_width=True):
 
 
 # =========================
-# AUTO CONTROL THEO AI - CHỈ DÀN PHƠI
+# AUTO CONTROL THEO AI
 # =========================
 if "last_auto_command" not in st.session_state:
     st.session_state.last_auto_command = None
