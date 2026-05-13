@@ -20,7 +20,7 @@ st.set_page_config(
 # MQTT WEBSOCKET CONFIG
 # =========================
 # Chỉ nhập HOST, không nhập wss:// và không nhập :8884
-MQTT_BROKER_HOST = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud:8884/mqtt"
+MQTT_BROKER_HOST = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
 
 MQTT_WS_PORT = 8884
 MQTT_WS_PATH = "/mqtt"
