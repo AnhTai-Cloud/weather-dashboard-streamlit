@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+import plotly.graph_objects as go
 import json
 import time
 import ssl
@@ -68,7 +68,7 @@ st.markdown("""
 }
 
 .block-container {
-    max-width: 1280px;
+    max-width: 1320px;
     padding-top: 1.6rem;
 }
 
@@ -150,9 +150,9 @@ section[data-testid="stSidebar"] {
 }
 
 .section-title {
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 850;
-    margin: 22px 0 12px 0;
+    margin: 26px 0 14px 0;
 }
 
 .control-note {
@@ -162,6 +162,35 @@ section[data-testid="stSidebar"] {
     color: #2f3341;
     margin-bottom: 12px;
     box-shadow: 0 6px 16px rgba(0,0,0,0.04);
+}
+
+.big-chart-card {
+    background: #f3eee8;
+    border-radius: 28px;
+    padding: 22px 24px 12px 24px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.055);
+    margin-top: 24px;
+    margin-bottom: 20px;
+}
+
+.rain-row {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    margin-top: -8px;
+    padding: 0 12px 8px 12px;
+}
+
+.rain-item {
+    text-align: center;
+    font-size: 15px;
+    color: #0076b6;
+}
+
+.rain-time {
+    color: #555;
+    margin-top: 7px;
+    font-size: 14px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -242,11 +271,7 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         target_angle = SERVO_CLOSE_ANGLE
         action_text = "Đóng / thu dàn phơi"
     else:
-        return False, {
-            "error": "Invalid command",
-            "command": command,
-            "allowed_commands": ["OPEN", "CLOSE"]
-        }
+        return False, "Lệnh không hợp lệ"
 
     payload = {
         "device": cfg["device_id"],
@@ -257,16 +282,6 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         "source": "streamlit",
         "reason": reason,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-    debug = {
-        "broker": cfg["broker"],
-        "port": cfg["port"],
-        "topic": cfg["topic_cmd"],
-        "tls": cfg["tls"],
-        "username": cfg["username"],
-        "password_length": len(cfg["password"]),
-        "payload": payload
     }
 
     try:
@@ -313,12 +328,7 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         if not connected["ok"]:
             client.loop_stop()
             client.disconnect()
-
-            return False, {
-                "error": "MQTT connect failed",
-                "connect_rc": connected["rc"],
-                "debug": debug
-            }
+            return False, f"MQTT connect failed, rc={connected['rc']}"
 
         msg_info = client.publish(
             cfg["topic_cmd"],
@@ -333,23 +343,12 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         client.disconnect()
 
         if msg_info.rc == mqtt.MQTT_ERR_SUCCESS:
-            return True, {
-                "status": "published",
-                "debug": debug
-            }
+            return True, payload
 
-        return False, {
-            "error": "Publish failed",
-            "publish_rc": msg_info.rc,
-            "debug": debug
-        }
+        return False, f"Publish failed, rc={msg_info.rc}"
 
     except Exception as e:
-        return False, {
-            "error": str(e),
-            "type": type(e).__name__,
-            "debug": debug
-        }
+        return False, f"{type(e).__name__}: {e}"
 
 
 def auto_decide_command(latest):
@@ -784,6 +783,93 @@ def main_iot_weather_card(df, latest):
 
 
 # =========================
+# BIG BEAUTIFUL CHART
+# =========================
+def render_big_temperature_chart(df):
+    chart_df = df.tail(24).copy()
+    chart_df["time"] = pd.to_datetime(chart_df["time"])
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=chart_df["time"],
+            y=chart_df["temperature"],
+            mode="lines+markers+text",
+            text=[f"{v:.0f}°" for v in chart_df["temperature"]],
+            textposition="top center",
+            line=dict(
+                width=4,
+                color="rgba(255, 150, 150, 0.95)",
+                shape="spline",
+                smoothing=1.2
+            ),
+            marker=dict(
+                size=8,
+                color="rgba(255, 130, 130, 1)",
+                line=dict(width=2, color="white")
+            ),
+            fill="tozeroy",
+            fillcolor="rgba(255, 160, 160, 0.22)",
+            hovertemplate=(
+                "<b>%{x|%H:%M}</b><br>"
+                "Nhiệt độ: %{y:.1f}°C<br>"
+                "<extra></extra>"
+            )
+        )
+    )
+
+    fig.update_layout(
+        height=500,
+        margin=dict(l=20, r=20, t=30, b=30),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#f8f6f3",
+        showlegend=False,
+        font=dict(
+            size=14,
+            color="#2f3341"
+        ),
+        xaxis=dict(
+            title="",
+            showgrid=False,
+            tickformat="%H:%M",
+            tickangle=0,
+            linecolor="rgba(0,0,0,0.08)",
+            tickfont=dict(size=14)
+        ),
+        yaxis=dict(
+            title="Nhiệt độ °C",
+            showgrid=True,
+            gridcolor="rgba(0,0,0,0.06)",
+            zeroline=False,
+            tickfont=dict(size=14)
+        )
+    )
+
+    st.markdown('<div class="big-chart-card">', unsafe_allow_html=True)
+    st.plotly_chart(fig, use_container_width=True)
+
+    rain_data = chart_df.tail(8).reset_index(drop=True)
+
+    rain_html = '<div class="rain-row">'
+    for _, row in rain_data.iterrows():
+        rain_text = "Có mưa" if int(row["rain_sensor"]) == 1 else "0%"
+        time_text = row["time"].strftime("%H:%M")
+
+        rain_html += f"""
+        <div class="rain-item">
+            💧 {rain_text}
+            <div class="rain-time">{time_text}</div>
+        </div>
+        """
+
+    rain_html += "</div>"
+
+    st.markdown(rain_html, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =========================
 # LOAD DATA
 # =========================
 df = load_data()
@@ -851,9 +937,7 @@ with col_open:
         if ok:
             st.sidebar.success("Đã gửi OPEN 90°")
         else:
-            st.sidebar.error("Không gửi được MQTT")
-
-        st.sidebar.json(result)
+            st.sidebar.error(f"Không gửi được MQTT: {result}")
 
 with col_close:
     if st.button("ĐÓNG 0°", use_container_width=True):
@@ -865,9 +949,7 @@ with col_close:
         if ok:
             st.sidebar.success("Đã gửi CLOSE 0°")
         else:
-            st.sidebar.error("Không gửi được MQTT")
-
-        st.sidebar.json(result)
+            st.sidebar.error(f"Không gửi được MQTT: {result}")
 
 
 # =========================
@@ -897,9 +979,7 @@ if control_mode == "Tự động theo AI":
                 st.session_state.last_auto_command = current_key
                 st.sidebar.success(f"Đã tự động gửi lệnh {auto_cmd}")
             else:
-                st.sidebar.error("Không gửi được MQTT")
-
-            st.sidebar.json(result)
+                st.sidebar.error(f"Không gửi được MQTT: {result}")
         else:
             st.sidebar.caption("Lệnh này đã được gửi, không gửi lặp lại.")
 
@@ -1047,11 +1127,9 @@ with right:
             )
 
             if ok:
-                st.success("Đã gửi OPEN - angle 90°")
+                st.success("Đã gửi lệnh mở dàn phơi 90°")
             else:
-                st.error("Không gửi được MQTT")
-
-            st.json(result)
+                st.error(f"Không gửi được MQTT: {result}")
 
     with btn2:
         if st.button("ĐÓNG DÀN PHƠI 0°", use_container_width=True, key="main_close"):
@@ -1061,36 +1139,20 @@ with right:
             )
 
             if ok:
-                st.success("Đã gửi CLOSE - angle 0°")
+                st.success("Đã gửi lệnh đóng dàn phơi 0°")
             else:
-                st.error("Không gửi được MQTT")
+                st.error(f"Không gửi được MQTT: {result}")
 
-            st.json(result)
 
-    st.markdown('<div class="section-title">Biểu đồ cảm biến</div>', unsafe_allow_html=True)
+# =========================
+# BIG CHART OUTSIDE COLUMNS
+# =========================
+st.markdown(
+    '<div class="section-title">Biểu đồ nhiệt độ & mưa 24 giờ gần nhất</div>',
+    unsafe_allow_html=True
+)
 
-    chart_df = df.tail(24).copy()
-
-    fig = px.line(
-        chart_df,
-        x="time",
-        y=["temperature", "humidity"],
-        markers=True,
-        labels={
-            "time": "Thời gian",
-            "value": "Giá trị",
-            "variable": "Cảm biến"
-        }
-    )
-
-    fig.update_layout(
-        height=320,
-        margin=dict(l=10, r=10, t=20, b=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#f3eee8"
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
+render_big_temperature_chart(df)
 
 
 # =========================
