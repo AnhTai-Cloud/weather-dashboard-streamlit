@@ -820,8 +820,8 @@ def render_big_temperature_chart(df):
     )
 
     fig.update_layout(
-        height=500,
-        margin=dict(l=20, r=20, t=30, b=30),
+        height=520,
+        margin=dict(l=20, r=20, t=35, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#f8f6f3",
         showlegend=False,
@@ -846,28 +846,53 @@ def render_big_temperature_chart(df):
         )
     )
 
-    st.markdown('<div class="big-chart-card">', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="
+            background:#f3eee8;
+            border-radius:28px;
+            padding:22px 24px 12px 24px;
+            box-shadow:0 8px 24px rgba(0,0,0,0.055);
+            margin-top:24px;
+            margin-bottom:10px;
+        ">
+        """,
+        unsafe_allow_html=True
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
     rain_data = chart_df.tail(8).reset_index(drop=True)
+    rain_cols = st.columns(8)
 
-    rain_html = '<div class="rain-row">'
-    for _, row in rain_data.iterrows():
+    for i, row in rain_data.iterrows():
         rain_text = "Có mưa" if int(row["rain_sensor"]) == 1 else "0%"
         time_text = row["time"].strftime("%H:%M")
 
-        rain_html += f"""
-        <div class="rain-item">
-            💧 {rain_text}
-            <div class="rain-time">{time_text}</div>
-        </div>
-        """
+        with rain_cols[i]:
+            st.markdown(
+                f"""
+                <div style="
+                    text-align:center;
+                    font-size:15px;
+                    color:#0076b6;
+                    margin-top:-8px;
+                    margin-bottom:10px;
+                ">
+                    💧 {rain_text}
+                    <div style="
+                        color:#555;
+                        margin-top:7px;
+                        font-size:14px;
+                    ">
+                        {time_text}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-    rain_html += "</div>"
-
-    st.markdown(rain_html, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================
 # LOAD DATA
