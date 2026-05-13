@@ -1095,15 +1095,19 @@ async function loadForecast(force = false) {
         let html = "";
 
         daily.slice(0, 5).forEach(function(day) {
-            html += `
-                <div class="day-item">
-                    <div class="day-name">${day.day_name || "--"}</div>
-                    <div class="day-date">${day.date || "--"}</div>
-                    <div class="day-icon"><i class="${iconClass(day.icon)}"></i></div>
-                    <div class="day-temp">${Number(day.temp_max || 0).toFixed(0)}° / ${Number(day.temp_min || 0).toFixed(0)}°</div>
-                    <div class="day-rain">Mưa: ${Number(day.rain_probability || 0).toFixed(0)}%</div>
-                </div>
-            `;
+            html += ""
+                + "<div class='day-item'>"
+                + "<div class='day-name'>" + (day.day_name || "--") + "</div>"
+                + "<div class='day-date'>" + (day.date || "--") + "</div>"
+                + "<div class='day-icon'><i class='" + iconClass(day.icon) + "'></i></div>"
+                + "<div class='day-temp'>"
+                + Number(day.temp_max || 0).toFixed(0) + "° / "
+                + Number(day.temp_min || 0).toFixed(0) + "°"
+                + "</div>"
+                + "<div class='day-rain'>Mưa: "
+                + Number(day.rain_probability || 0).toFixed(0)
+                + "%</div>"
+                + "</div>";
         });
 
         el("dailyForecast").innerHTML = html;
