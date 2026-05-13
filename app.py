@@ -30,11 +30,11 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - FIX CỨNG HIVEMQ CLOUD
 # =========================
-MQTT_BROKER = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
+MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491adf.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883
 
-MQTT_USERNAME = "ESP32-client"
-MQTT_PASSWORD = "Tan01052005!"
+MQTT_USERNAME = "anhtai"
+MQTT_PASSWORD = "NHAP_MAT_KHAU_HIVEMQ_CUA_BAN"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 MQTT_TOPIC_DATA = "iot/clothesline/data"
@@ -251,6 +251,28 @@ def metric_card(title, value, desc, icon_class, color, percent):
     st.markdown(" ".join(html.split()), unsafe_allow_html=True)
 
 
+def status_card(title, state, desc, icon_class, color):
+    html = f"""
+    <div class="metric-card">
+        <div class="metric-head">
+            <div class="metric-title">{title}</div>
+            <div class="metric-icon-box">
+                <i class="{icon_class}" style="color:{color};"></i>
+            </div>
+        </div>
+
+        <div class="metric-value" style="font-size:26px;">{state}</div>
+        <div class="metric-desc">{desc}</div>
+
+        <div class="progress-wrap">
+            <div class="progress-fill" style="width:100%; background:{color};"></div>
+        </div>
+    </div>
+    """
+
+    st.markdown(" ".join(html.split()), unsafe_allow_html=True)
+
+
 # =========================
 # MQTT FUNCTIONS
 # =========================
@@ -449,12 +471,24 @@ def load_data():
                 df[col] = "Chưa dự đoán"
             elif col == "weather_label":
                 df[col] = "Không rõ"
-            elif col == "gas":
-                df[col] = 0
             else:
                 df[col] = 0
 
     return df
+
+
+# =========================
+# UI STATE
+# =========================
+def init_device_state():
+    if "clothesline_state" not in st.session_state:
+        st.session_state.clothesline_state = "ĐANG ĐÓNG"
+
+    if "door_state" not in st.session_state:
+        st.session_state.door_state = "ĐANG ĐÓNG"
+
+    if "last_manual_action" not in st.session_state:
+        st.session_state.last_manual_action = "CHƯA CÓ LỆNH"
 
 
 # =========================
@@ -950,6 +984,7 @@ def render_big_temperature_chart(df):
 # =========================
 df = load_data()
 latest = df.iloc[-1]
+init_device_state()
 
 
 # =========================
@@ -1015,6 +1050,8 @@ with col_open:
         )
 
         if ok:
+            st.session_state.clothesline_state = "ĐANG MỞ"
+            st.session_state.last_manual_action = "MỞ DÀN PHƠI 90°"
             st.sidebar.success("Đã gửi OPEN 90°")
         else:
             st.sidebar.error(f"Không gửi được MQTT: {result}")
@@ -1027,6 +1064,8 @@ with col_close:
         )
 
         if ok:
+            st.session_state.clothesline_state = "ĐANG ĐÓNG"
+            st.session_state.last_manual_action = "ĐÓNG DÀN PHƠI 0°"
             st.sidebar.success("Đã gửi CLOSE 0°")
         else:
             st.sidebar.error(f"Không gửi được MQTT: {result}")
@@ -1038,6 +1077,8 @@ if st.sidebar.button("MỞ CỬA MG90S", use_container_width=True):
     )
 
     if ok:
+        st.session_state.door_state = "ĐANG MỞ"
+        st.session_state.last_manual_action = "MỞ CỬA MG90S"
         st.sidebar.success("Đã gửi MSG40 - mở cửa MG90S 90°")
     else:
         st.sidebar.error(f"Không gửi được MQTT: {result}")
@@ -1068,6 +1109,13 @@ if control_mode == "Tự động theo AI":
 
             if ok:
                 st.session_state.last_auto_command = current_key
+
+                if auto_cmd == "OPEN":
+                    st.session_state.clothesline_state = "ĐANG MỞ"
+                elif auto_cmd == "CLOSE":
+                    st.session_state.clothesline_state = "ĐANG ĐÓNG"
+
+                st.session_state.last_manual_action = f"AI GỬI {auto_cmd}"
                 st.sidebar.success(f"Đã tự động gửi lệnh {auto_cmd}")
             else:
                 st.sidebar.error(f"Không gửi được MQTT: {result}")
@@ -1212,7 +1260,7 @@ with right:
         control_text = "GIỮ NGUYÊN"
 
     metric_card(
-        "Điều khiển MG90S",
+        "AI điều khiển dàn phơi",
         control_text,
         auto_reason,
         control_icon,
@@ -1220,20 +1268,35 @@ with right:
         100
     )
 
-    st.markdown('<div class="section-title">ĐIỀU KHIỂN THỦ CÔNG</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">TRẠNG THÁI THIẾT BỊ</div>', unsafe_allow_html=True)
 
-    st.markdown(
-        f"""
-        <div class="control-note">
-            SERVO DÀN PHƠI: <b>{SERVO_NAME}</b><br>
-            OPEN → {SERVO_OPEN_ANGLE}° &nbsp;&nbsp; | &nbsp;&nbsp;
-            CLOSE → {SERVO_CLOSE_ANGLE}°<br>
-            SERVO CỬA: <b>{DOOR_SERVO_NAME}</b> &nbsp;&nbsp; | &nbsp;&nbsp;
-            MSG40 → {DOOR_OPEN_ANGLE}°
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    state_col1, state_col2 = st.columns(2)
+
+    with state_col1:
+        clothes_color = "#43b36a" if st.session_state.clothesline_state == "ĐANG MỞ" else "#e74c3c"
+
+        status_card(
+            "Trạng thái dàn phơi",
+            st.session_state.clothesline_state,
+            f"Servo {SERVO_NAME}",
+            "wi wi-day-sunny" if st.session_state.clothesline_state == "ĐANG MỞ" else "wi wi-rain",
+            clothes_color
+        )
+
+    with state_col2:
+        door_color = "#43b36a" if st.session_state.door_state == "ĐANG MỞ" else "#e74c3c"
+
+        status_card(
+            "Trạng thái cửa",
+            st.session_state.door_state,
+            f"Servo {DOOR_SERVO_NAME}",
+            "wi wi-direction-up" if st.session_state.door_state == "ĐANG MỞ" else "wi wi-direction-down",
+            door_color
+        )
+
+    st.info(f"Lệnh gần nhất: {st.session_state.last_manual_action}")
+
+    st.markdown('<div class="section-title">ĐIỀU KHIỂN THỦ CÔNG</div>', unsafe_allow_html=True)
 
     btn1, btn2, btn3 = st.columns(3)
 
@@ -1245,7 +1308,9 @@ with right:
             )
 
             if ok:
-                st.success("Đã gửi lệnh mở dàn phơi 90°")
+                st.session_state.clothesline_state = "ĐANG MỞ"
+                st.session_state.last_manual_action = "MỞ DÀN PHƠI 90°"
+                st.success("Đã mở dàn phơi 90°")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
 
@@ -1257,7 +1322,9 @@ with right:
             )
 
             if ok:
-                st.success("Đã gửi lệnh đóng dàn phơi 0°")
+                st.session_state.clothesline_state = "ĐANG ĐÓNG"
+                st.session_state.last_manual_action = "ĐÓNG DÀN PHƠI 0°"
+                st.success("Đã đóng dàn phơi 0°")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
 
@@ -1269,7 +1336,9 @@ with right:
             )
 
             if ok:
-                st.success("Đã gửi lệnh MSG40 - mở cửa MG90S 90°")
+                st.session_state.door_state = "ĐANG MỞ"
+                st.session_state.last_manual_action = "MỞ CỬA MG90S"
+                st.success("Đã gửi lệnh MSG40 - cửa đang mở")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
 
