@@ -40,11 +40,11 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - HIVEMQ CLOUD
 # =========================
-MQTT_BROKER = "NHAP_BROKER_HIVEMQ_CUA_BAN"
+MQTT_BROKER = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883
 
-MQTT_USERNAME = "NHAP_USERNAME_HIVEMQ"
-MQTT_PASSWORD = "NHAP_PASSWORD_HIVEMQ"
+MQTT_USERNAME = "ESP32-client"
+MQTT_PASSWORD = "Tan01052005!"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 
