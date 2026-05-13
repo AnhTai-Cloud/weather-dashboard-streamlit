@@ -1,36 +1,32 @@
 import json
-import ssl
-import time
-from datetime import datetime, timedelta
+from string import Template
 
-import numpy as np
-import pandas as pd
-import paho.mqtt.client as mqtt
-import plotly.graph_objects as go
 import streamlit as st
+from streamlit.components.v1 import html
 
 
-# =========================================================
+# =========================
 # PAGE CONFIG
-# =========================================================
+# =========================
 st.set_page_config(
-    page_title="IoT Weather Dashboard",
+    page_title="IoT Smart Clothesline Dashboard",
     page_icon="🌦️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 
-# =========================================================
-# MQTT CONFIG - SỬA 3 DÒNG NÀY THEO HIVEMQ CỦA BẠN
-# =========================================================
-MQTT_BROKER = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
-MQTT_PORT = 8883
+# =========================
+# MQTT WEBSOCKET CONFIG
+# =========================
+# Chỉ nhập HOST, không nhập wss:// và không nhập :8884
+MQTT_BROKER_HOST = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud:8884/mqtt"
+
+MQTT_WS_PORT = 8884
+MQTT_WS_PATH = "/mqtt"
 
 MQTT_USERNAME = "ESP32-client"
 MQTT_PASSWORD = "Tan01052005!"
-
-MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
 MQTT_TOPIC_CONTROL_RACK = "smart_home/control/rack"
@@ -38,1115 +34,902 @@ MQTT_TOPIC_CONTROL_DOOR = "smart_home/control/door"
 MQTT_TOPIC_CONTROL_MODE = "smart_home/control/mode"
 
 
-# =========================================================
-# DEVICE CONFIG
-# =========================================================
-SERVO_NAME = "MG90S"
-SERVO_OPEN_ANGLE = 90
-SERVO_CLOSE_ANGLE = 0
+MQTT_WS_URL = f"wss://{MQTT_BROKER_HOST}:{MQTT_WS_PORT}{MQTT_WS_PATH}"
 
-DOOR_SERVO_NAME = "MG90S"
-DOOR_OPEN_ANGLE = 90
 
-GAS_SENSOR_NAME = "MQ-5"
-GAS_SAFE_LIMIT = 300
+html_template = Template(r"""
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-DATA_SOURCE = "data.csv"
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
 
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-# =========================================================
-# CSS + ICON PACK
-# =========================================================
-st.markdown(
-    """
-    <link rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    """
-<style>
-html, body, .stApp {
-    font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif !important;
-}
-
-button, input, textarea, select, div, p, span {
-    font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif;
-}
-
-i[class^="wi"], i[class*=" wi-"] {
-    font-family: "weathericons" !important;
-    font-style: normal !important;
-}
-
-.stApp {
-    background: #eef0f3;
-    color: #2f3341;
-}
-
-.block-container {
-    max-width: 1320px;
-    padding-top: 1.4rem;
-}
-
-section[data-testid="stSidebar"] {
-    background: #e6e9ed;
-}
-
-.main-title {
-    font-size: 30px;
-    font-weight: 850;
-    color: #2f3341;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    line-height: 1.28;
-}
-
-.sub-title {
-    color: #74777f;
-    font-size: 14px;
-    margin-bottom: 18px;
-}
-
-.section-title {
-    font-size: 23px;
-    font-weight: 850;
-    text-transform: uppercase;
-    margin: 24px 0 14px 0;
-    color: #2f3341;
-}
-
-.metric-card {
-    background: #f3eee8;
-    border-radius: 24px;
-    padding: 18px 20px;
-    min-height: 164px;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.05);
-    margin-bottom: 16px;
-}
-
-.metric-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.metric-title {
-    font-size: 15px;
-    font-weight: 850;
-    text-transform: uppercase;
-}
-
-.metric-icon-box {
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
-    background: rgba(255,255,255,0.85);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.metric-icon-box i {
-    font-size: 25px;
-}
-
-.metric-value {
-    font-size: 30px;
-    font-weight: 850;
-    margin-top: 14px;
-}
-
-.metric-desc {
-    color: #74777f;
-    font-size: 13px;
-    margin-top: 4px;
-}
-
-.progress-wrap {
-    width: 100%;
-    height: 9px;
-    background: #ded8d1;
-    border-radius: 999px;
-    overflow: hidden;
-    margin-top: 14px;
-}
-
-.progress-fill {
-    height: 100%;
-    border-radius: 999px;
-}
-
-.status-box {
-    background: #f3eee8;
-    border-radius: 22px;
-    padding: 16px 18px;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.05);
-    margin-bottom: 14px;
-}
-
-.status-title {
-    font-size: 14px;
-    color: #74777f;
-    text-transform: uppercase;
-    font-weight: 750;
-}
-
-.status-value {
-    font-size: 25px;
-    font-weight: 850;
-    margin-top: 8px;
-}
-
-.mqtt-live {
-    background: #e8f6ef;
-    color: #20724b;
-    border-radius: 14px;
-    padding: 10px 14px;
-    margin-bottom: 12px;
-    font-weight: 700;
-}
-
-.mqtt-warn {
-    background: #fff5d9;
-    color: #8a6200;
-    border-radius: 14px;
-    padding: 10px 14px;
-    margin-bottom: 12px;
-    font-weight: 700;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-
-# =========================================================
-# BASIC HELPERS
-# =========================================================
-def clamp(x, min_val=0, max_val=100):
-    try:
-        return max(min_val, min(float(x), max_val))
-    except Exception:
-        return min_val
-
-
-def weather_icon(label):
-    label = str(label).lower()
-
-    if "mưa" in label or "rain" in label:
-        return "wi wi-rain", "#5b83ff"
-
-    if "âm" in label or "cloud" in label:
-        return "wi wi-cloudy", "#f5a623"
-
-    if "nắng" in label or "clear" in label or "sun" in label:
-        return "wi wi-day-sunny", "#f5a623"
-
-    return "wi wi-day-cloudy", "#f5a623"
-
-
-def metric_card(title, value, desc, icon_class, color, percent):
-    percent = clamp(percent)
-
-    html = f"""
-    <div class="metric-card">
-        <div class="metric-head">
-            <div class="metric-title">{title}</div>
-            <div class="metric-icon-box">
-                <i class="{icon_class}" style="color:{color};"></i>
-            </div>
-        </div>
-        <div class="metric-value">{value}</div>
-        <div class="metric-desc">{desc}</div>
-        <div class="progress-wrap">
-            <div class="progress-fill" style="width:{percent}%; background:{color};"></div>
-        </div>
-    </div>
-    """
-
-    st.markdown(" ".join(html.split()), unsafe_allow_html=True)
-
-
-def status_box(title, value, desc, color):
-    html = f"""
-    <div class="status-box">
-        <div class="status-title">{title}</div>
-        <div class="status-value" style="color:{color};">{value}</div>
-        <div class="metric-desc">{desc}</div>
-    </div>
-    """
-    st.markdown(" ".join(html.split()), unsafe_allow_html=True)
-
-
-# =========================================================
-# MQTT
-# =========================================================
-def create_mqtt_client(suffix):
-    client_id = f"{MQTT_CLIENT_ID}_{suffix}_{int(time.time() * 1000)}"
-
-    client = mqtt.Client(
-        client_id=client_id,
-        protocol=mqtt.MQTTv311,
-    )
-
-    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-
-    client.tls_set(
-        cert_reqs=ssl.CERT_REQUIRED,
-        tls_version=ssl.PROTOCOL_TLS_CLIENT,
-    )
-
-    return client
-
-
-def mqtt_get_latest_sensor_data(timeout_sec=1.2):
-    """
-    Đọc payload mới nhất từ topic sensor.
-    ESP nên publish retained để fragment đọc được ngay.
-    """
-
-    result = {
-        "payload": None,
-        "error": None,
-        "raw": None,
-    }
-
-    try:
-        def on_connect(client, userdata, flags, rc):
-            if rc == 0:
-                client.subscribe(MQTT_TOPIC_SENSOR_DATA, qos=1)
-            else:
-                result["error"] = f"MQTT connect failed, rc={rc}"
-
-        def on_message(client, userdata, msg):
-            try:
-                text = msg.payload.decode("utf-8")
-                result["raw"] = text
-                result["payload"] = json.loads(text)
-            except Exception as e:
-                result["error"] = f"Parse payload error: {type(e).__name__}: {e}"
-
-        client = create_mqtt_client("sub")
-        client.on_connect = on_connect
-        client.on_message = on_message
-
-        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=30)
-        client.loop_start()
-
-        start = time.time()
-        while time.time() - start < timeout_sec:
-            if result["payload"] is not None or result["error"] is not None:
-                break
-            time.sleep(0.05)
-
-        client.loop_stop()
-        client.disconnect()
-
-        return result["payload"], result["error"], result["raw"]
-
-    except Exception as e:
-        return None, f"{type(e).__name__}: {e}", None
-
-
-def mqtt_publish_control(topic, message):
-    """
-    Gửi lệnh nhanh xuống ESP.
-    QoS 0 để giảm delay.
-    """
-
-    try:
-        client = create_mqtt_client("pub_fast")
-        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=30)
-        client.loop_start()
-
-        time.sleep(0.15)
-
-        info = client.publish(
-            topic,
-            message,
-            qos=0,
-            retain=False,
-        )
-
-        start = time.time()
-        while not info.is_published() and time.time() - start < 0.6:
-            time.sleep(0.03)
-
-        client.loop_stop()
-        client.disconnect()
-
-        return True, {
-            "topic": topic,
-            "message": message,
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif;
         }
 
-    except Exception as e:
-        return False, f"{type(e).__name__}: {e}"
+        body {
+            margin: 0;
+            background: #eef0f3;
+            color: #2f3341;
+        }
 
+        .page {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 18px 18px 34px 18px;
+        }
 
-def mqtt_open_rack():
-    return mqtt_publish_control(MQTT_TOPIC_CONTROL_RACK, "OPEN")
+        .topbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
 
+        .title {
+            font-size: 30px;
+            font-weight: 850;
+            line-height: 1.25;
+            text-transform: uppercase;
+        }
 
-def mqtt_close_rack():
-    return mqtt_publish_control(MQTT_TOPIC_CONTROL_RACK, "CLOSE")
+        .subtitle {
+            color: #74777f;
+            font-size: 14px;
+            margin-top: 5px;
+        }
 
+        .mqtt-status {
+            min-width: 250px;
+            text-align: right;
+        }
 
-def mqtt_open_door():
-    return mqtt_publish_control(MQTT_TOPIC_CONTROL_DOOR, "OPEN")
+        .badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 8px 13px;
+            font-weight: 800;
+            font-size: 13px;
+            color: white;
+        }
 
+        .badge-wait {
+            background: #f5a623;
+        }
 
-def mqtt_close_door():
-    return mqtt_publish_control(MQTT_TOPIC_CONTROL_DOOR, "CLOSE")
+        .badge-ok {
+            background: #43b36a;
+        }
 
+        .badge-error {
+            background: #e74c3c;
+        }
 
-def mqtt_set_auto_mode():
-    return mqtt_publish_control(MQTT_TOPIC_CONTROL_MODE, "AUTO")
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 16px;
+        }
 
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 16px;
+        }
 
-def mqtt_set_manual_mode():
-    return mqtt_publish_control(MQTT_TOPIC_CONTROL_MODE, "MANUAL")
+        .card {
+            background: #f3eee8;
+            border-radius: 24px;
+            padding: 18px 20px;
+            min-height: 160px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+        }
 
+        .card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-# =========================================================
-# DATA MAPPING
-# =========================================================
-def mqtt_payload_to_row(payload):
-    rain_state = str(payload.get("rain_state", "NO_RAIN")).upper()
-    rack_state = str(payload.get("rack_state", "CLOSE")).upper()
-    door_state = str(payload.get("door_state", "CLOSE")).upper()
+        .card-title {
+            font-size: 15px;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
 
-    temperature = float(payload.get("temperature", 0))
-    humidity = float(payload.get("humidity", 0))
-    pressure = float(payload.get("pressure_hpa", payload.get("pressure", 0)))
-    light = float(payload.get("light_lux", payload.get("light", 0)))
-    gas = float(payload.get("gas_raw", payload.get("gas", 0)))
+        .icon-box {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    rain_sensor = 1 if rain_state in ["RAIN", "RAINING", "YES", "1", "TRUE"] else 0
+        .icon-box i {
+            font-size: 25px;
+        }
 
-    if rain_sensor == 1:
-        weather_label = "Mưa"
-    elif light < 300:
-        weather_label = "Âm u"
-    else:
-        weather_label = "Nắng"
+        .value {
+            font-size: 30px;
+            font-weight: 850;
+            margin-top: 14px;
+            word-break: break-word;
+        }
 
-    return {
-        "time": datetime.now(),
-        "temperature": temperature,
-        "humidity": humidity,
-        "pressure": pressure,
-        "light": light,
-        "rain_sensor": rain_sensor,
-        "gas": gas,
-        "weather_label": weather_label,
-        "ai_prediction": weather_label,
+        .desc {
+            color: #74777f;
+            font-size: 13px;
+            margin-top: 4px;
+        }
 
-        "rain_raw": int(payload.get("rain_raw", 0)),
-        "rain_state": rain_state,
-        "gas_alarm": bool(payload.get("gas_alarm", False)),
-        "rack_state": rack_state,
-        "door_state": door_state,
-        "mode": str(payload.get("mode", "UNKNOWN")).upper(),
-        "period": str(payload.get("period", "UNKNOWN")).upper(),
-        "mqtt_raw": payload,
+        .progress-wrap {
+            width: 100%;
+            height: 9px;
+            background: #ded8d1;
+            border-radius: 999px;
+            overflow: hidden;
+            margin-top: 14px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            transition: width 0.25s ease, background 0.25s ease;
+        }
+
+        .section-title {
+            font-size: 23px;
+            font-weight: 850;
+            text-transform: uppercase;
+            margin: 24px 0 14px 0;
+            color: #2f3341;
+        }
+
+        .control-card {
+            background: #f3eee8;
+            border-radius: 24px;
+            padding: 18px 20px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.05);
+            margin-bottom: 16px;
+        }
+
+        .button-row {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .button-row-2 {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        button {
+            border: none;
+            border-radius: 18px;
+            padding: 15px 12px;
+            font-size: 15px;
+            font-weight: 850;
+            cursor: pointer;
+            color: white;
+            transition: transform 0.12s ease, opacity 0.12s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            opacity: 0.92;
+        }
+
+        button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-open {
+            background: #43b36a;
+        }
+
+        .btn-close {
+            background: #e74c3c;
+        }
+
+        .btn-door {
+            background: #5b83ff;
+        }
+
+        .btn-mode {
+            background: #9a7dff;
+        }
+
+        .btn-ai {
+            background: #f5a623;
+        }
+
+        .info-line {
+            background: #e8eefc;
+            color: #2f4a8a;
+            border-radius: 16px;
+            padding: 12px 14px;
+            font-size: 14px;
+            font-weight: 750;
+            margin-top: 12px;
+        }
+
+        .chart-card {
+            background: #f3eee8;
+            border-radius: 28px;
+            padding: 20px 20px 10px 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.055);
+            margin-bottom: 16px;
+        }
+
+        .raw-box {
+            background: #20242c;
+            color: #dbe6ff;
+            border-radius: 18px;
+            padding: 14px;
+            overflow: auto;
+            max-height: 260px;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }
+
+        .small-note {
+            color: #74777f;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 1050px) {
+            .grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .button-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 650px) {
+            .grid, .grid-2, .button-row, .button-row-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar {
+                flex-direction: column;
+            }
+
+            .mqtt-status {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+
+<body>
+<div class="page">
+
+    <div class="topbar">
+        <div>
+            <div class="title">IOT WEATHER DASHBOARD - HỆ THỐNG PHƠI ĐỒ THÔNG MINH</div>
+            <div class="subtitle">
+                Dữ liệu cập nhật trực tiếp bằng MQTT WebSocket, không refresh Streamlit.
+                <br>
+                Cập nhật cuối: <span id="lastUpdate">--</span>
+            </div>
+        </div>
+
+        <div class="mqtt-status">
+            <div id="mqttBadge" class="badge badge-wait">ĐANG KẾT NỐI MQTT...</div>
+            <div class="subtitle" id="mqttDetail">Broker: --</div>
+        </div>
+    </div>
+
+    <div class="section-title">Dữ liệu cảm biến realtime</div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Nhiệt độ</div>
+                <div class="icon-box"><i class="wi wi-thermometer" style="color:#f5a623;"></i></div>
+            </div>
+            <div class="value" id="temperature">-- °C</div>
+            <div class="desc">Dữ liệu từ ESP32</div>
+            <div class="progress-wrap"><div id="temperatureBar" class="progress-fill" style="width:0%; background:#f5a623;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Độ ẩm</div>
+                <div class="icon-box"><i class="wi wi-humidity" style="color:#5b83ff;"></i></div>
+            </div>
+            <div class="value" id="humidity">-- %</div>
+            <div class="desc">Độ ẩm không khí</div>
+            <div class="progress-wrap"><div id="humidityBar" class="progress-fill" style="width:0%; background:#5b83ff;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Áp suất</div>
+                <div class="icon-box"><i class="wi wi-barometer" style="color:#9a7dff;"></i></div>
+            </div>
+            <div class="value" id="pressure">-- hPa</div>
+            <div class="desc">BMP280</div>
+            <div class="progress-wrap"><div id="pressureBar" class="progress-fill" style="width:0%; background:#9a7dff;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Ánh sáng</div>
+                <div class="icon-box"><i class="wi wi-day-sunny" style="color:#f5a623;"></i></div>
+            </div>
+            <div class="value" id="light">-- lux</div>
+            <div class="desc">Light sensor</div>
+            <div class="progress-wrap"><div id="lightBar" class="progress-fill" style="width:0%; background:#f5a623;"></div></div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Cảm biến mưa</div>
+                <div class="icon-box"><i class="wi wi-raindrop" id="rainIcon" style="color:#43b36a;"></i></div>
+            </div>
+            <div class="value" id="rainState">--</div>
+            <div class="desc" id="rainRaw">Raw: --</div>
+            <div class="progress-wrap"><div id="rainBar" class="progress-fill" style="width:10%; background:#43b36a;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Gas MQ-5</div>
+                <div class="icon-box"><i class="wi wi-smoke" id="gasIcon" style="color:#43b36a;"></i></div>
+            </div>
+            <div class="value" id="gas">--</div>
+            <div class="desc" id="gasStatus">Trạng thái: --</div>
+            <div class="progress-wrap"><div id="gasBar" class="progress-fill" style="width:0%; background:#43b36a;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">AI dự đoán</div>
+                <div class="icon-box"><i class="wi wi-day-cloudy" id="aiIcon" style="color:#f5a623;"></i></div>
+            </div>
+            <div class="value" id="aiPrediction">--</div>
+            <div class="desc">Nắng / Âm u / Mưa</div>
+            <div class="progress-wrap"><div id="aiBar" class="progress-fill" style="width:80%; background:#f5a623;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Chế độ ESP</div>
+                <div class="icon-box"><i class="wi wi-time-3" style="color:#9a7dff;"></i></div>
+            </div>
+            <div class="value" id="mode">--</div>
+            <div class="desc">Period: <span id="period">--</span></div>
+            <div class="progress-wrap"><div id="modeBar" class="progress-fill" style="width:80%; background:#9a7dff;"></div></div>
+        </div>
+    </div>
+
+    <div class="section-title">Trạng thái thiết bị</div>
+
+    <div class="grid-2">
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Trạng thái dàn phơi</div>
+                <div class="icon-box"><i class="wi wi-day-sunny" id="rackIcon" style="color:#e74c3c;"></i></div>
+            </div>
+            <div class="value" id="rackState">ĐANG ĐÓNG</div>
+            <div class="desc">ESP rack_state: <span id="rackRaw">--</span></div>
+            <div class="progress-wrap"><div id="rackBar" class="progress-fill" style="width:100%; background:#e74c3c;"></div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">Trạng thái cửa</div>
+                <div class="icon-box"><i class="wi wi-direction-down" id="doorIcon" style="color:#e74c3c;"></i></div>
+            </div>
+            <div class="value" id="doorState">ĐANG ĐÓNG</div>
+            <div class="desc">ESP door_state: <span id="doorRaw">--</span></div>
+            <div class="progress-wrap"><div id="doorBar" class="progress-fill" style="width:100%; background:#e74c3c;"></div></div>
+        </div>
+    </div>
+
+    <div class="section-title">Điều khiển MQTT</div>
+
+    <div class="control-card">
+        <div class="button-row">
+            <button class="btn-open" id="btnOpenRack">MỞ DÀN PHƠI 90°</button>
+            <button class="btn-close" id="btnCloseRack">ĐÓNG DÀN PHƠI 0°</button>
+            <button class="btn-door" id="btnOpenDoor">MỞ CỬA MG90S</button>
+        </div>
+
+        <div class="button-row-2">
+            <button class="btn-mode" id="btnManual">CHUYỂN MANUAL</button>
+            <button class="btn-mode" id="btnAuto">CHUYỂN AUTO</button>
+        </div>
+
+        <div class="button-row-2">
+            <button class="btn-ai" id="btnAiSend">GỬI LỆNH THEO AI</button>
+            <button class="btn-close" id="btnCloseDoor">ĐÓNG CỬA MG90S</button>
+        </div>
+
+        <div class="info-line" id="lastCommand">Lệnh gần nhất: Chưa có lệnh</div>
+        <div class="info-line" id="aiDecision">AI đề xuất: --</div>
+    </div>
+
+    <div class="section-title">Biểu đồ nhiệt độ realtime</div>
+
+    <div class="chart-card">
+        <canvas id="tempChart" height="110"></canvas>
+    </div>
+
+    <div class="section-title">Payload MQTT mới nhất</div>
+    <pre class="raw-box" id="rawPayload">Chưa có payload...</pre>
+
+    <div class="small-note">
+        Nếu dashboard không nhận dữ liệu, kiểm tra ESP đã publish retained lên
+        <b>smart_home/sensor/data</b> chưa. Nếu nút điều khiển không chạy, kiểm tra ESP đã subscribe
+        <b>smart_home/control/rack</b>, <b>smart_home/control/door</b>, <b>smart_home/control/mode</b> chưa.
+    </div>
+
+</div>
+
+<script>
+const MQTT_WS_URL = $MQTT_WS_URL;
+const MQTT_USERNAME = $MQTT_USERNAME;
+const MQTT_PASSWORD = $MQTT_PASSWORD;
+
+const TOPIC_SENSOR = $TOPIC_SENSOR;
+const TOPIC_RACK = $TOPIC_RACK;
+const TOPIC_DOOR = $TOPIC_DOOR;
+const TOPIC_MODE = $TOPIC_MODE;
+
+let mqttClient = null;
+let latestData = null;
+let lastAiCommand = "CLOSE";
+
+const tempLabels = [];
+const tempValues = [];
+const MAX_POINTS = 24;
+
+function el(id) {
+    return document.getElementById(id);
+}
+
+function clampJs(x, minVal, maxVal) {
+    const n = Number(x);
+    if (Number.isNaN(n)) return minVal;
+    return Math.max(minVal, Math.min(n, maxVal));
+}
+
+function nowText() {
+    return new Date().toLocaleString("vi-VN");
+}
+
+function setBadge(text, cls) {
+    const badge = el("mqttBadge");
+    badge.className = "badge " + cls;
+    badge.innerText = text;
+}
+
+function setProgress(id, percent, color) {
+    const bar = el(id);
+    bar.style.width = clampJs(percent, 0, 100) + "%";
+    if (color) {
+        bar.style.background = color;
+    }
+}
+
+function weatherLabel(data) {
+    const rainState = String(data.rain_state || "NO_RAIN").toUpperCase();
+    const light = Number(data.light_lux || data.light || 0);
+
+    if (rainState === "RAIN" || rainState === "RAINING") {
+        return "Mưa";
     }
 
-
-# =========================================================
-# FALLBACK DATA
-# =========================================================
-def make_demo_data():
-    now = datetime.now().replace(minute=0, second=0, microsecond=0)
-
-    rows = []
-
-    for i in range(36):
-        t = now - timedelta(hours=35 - i)
-
-        temp = 26 + np.sin(i / 4) * 2 + np.random.normal(0, 0.2)
-        hum = 78 + np.sin(i / 5) * 10 + np.random.normal(0, 1)
-        pressure = 1006 + np.sin(i / 7) * 2
-        light = max(0, 850 * np.sin((t.hour / 24) * np.pi))
-        rain = 1 if hum > 88 and light < 250 else 0
-        gas = max(0, 120 + np.random.normal(0, 18))
-
-        if rain == 1:
-            label = "Mưa"
-        elif light < 300:
-            label = "Âm u"
-        else:
-            label = "Nắng"
-
-        rows.append({
-            "time": t,
-            "temperature": round(temp, 1),
-            "humidity": round(hum, 1),
-            "pressure": round(pressure, 1),
-            "light": round(light, 0),
-            "rain_sensor": rain,
-            "gas": round(gas, 0),
-            "weather_label": label,
-            "ai_prediction": label,
-            "rain_raw": 0,
-            "rain_state": "RAIN" if rain == 1 else "NO_RAIN",
-            "gas_alarm": gas >= GAS_SAFE_LIMIT,
-            "rack_state": "CLOSE",
-            "door_state": "CLOSE",
-            "mode": "DEMO",
-            "period": "UNKNOWN",
-        })
-
-    return pd.DataFrame(rows)
-
-
-@st.cache_data(ttl=30)
-def load_fallback_data():
-    try:
-        df = pd.read_csv(DATA_SOURCE)
-    except Exception:
-        df = make_demo_data()
-
-    df["time"] = pd.to_datetime(df["time"])
-    df = df.sort_values("time").reset_index(drop=True)
-
-    required_cols = [
-        "temperature",
-        "humidity",
-        "pressure",
-        "light",
-        "rain_sensor",
-        "gas",
-        "weather_label",
-        "ai_prediction",
-        "rain_raw",
-        "rain_state",
-        "gas_alarm",
-        "rack_state",
-        "door_state",
-        "mode",
-        "period",
-    ]
-
-    for col in required_cols:
-        if col not in df.columns:
-            if col in ["weather_label", "ai_prediction"]:
-                df[col] = "Không rõ"
-            elif col in ["rain_state", "rack_state", "door_state", "mode", "period"]:
-                df[col] = "UNKNOWN"
-            elif col == "gas_alarm":
-                df[col] = False
-            else:
-                df[col] = 0
-
-    return df
-
-
-# =========================================================
-# UI STATE
-# =========================================================
-def init_state():
-    if "live_df" not in st.session_state:
-        st.session_state.live_df = pd.DataFrame()
-
-    if "latest_data" not in st.session_state:
-        fallback_df = load_fallback_data()
-        st.session_state.latest_data = fallback_df.iloc[-1].to_dict()
-
-    if "mqtt_payload" not in st.session_state:
-        st.session_state.mqtt_payload = None
-
-    if "mqtt_error" not in st.session_state:
-        st.session_state.mqtt_error = None
-
-    if "data_source_name" not in st.session_state:
-        st.session_state.data_source_name = "DATA.CSV FALLBACK"
-
-    if "clothesline_state" not in st.session_state:
-        st.session_state.clothesline_state = "ĐANG ĐÓNG"
-
-    if "door_state" not in st.session_state:
-        st.session_state.door_state = "ĐANG ĐÓNG"
-
-    if "last_manual_action" not in st.session_state:
-        st.session_state.last_manual_action = "CHƯA CÓ LỆNH"
-
-
-def update_state_from_latest(row):
-    rack_state = str(row.get("rack_state", "CLOSE")).upper()
-    door_state = str(row.get("door_state", "CLOSE")).upper()
-
-    if rack_state == "OPEN":
-        st.session_state.clothesline_state = "ĐANG MỞ"
-    elif rack_state == "CLOSE":
-        st.session_state.clothesline_state = "ĐANG ĐÓNG"
-
-    if door_state == "OPEN":
-        st.session_state.door_state = "ĐANG MỞ"
-    elif door_state == "CLOSE":
-        st.session_state.door_state = "ĐANG ĐÓNG"
-
-
-# =========================================================
-# AI DECISION
-# =========================================================
-def auto_decide_command(latest):
-    rain_sensor = int(latest["rain_sensor"])
-    prediction = str(latest["ai_prediction"])
-    humidity = float(latest["humidity"])
-    light = float(latest["light"])
-
-    if rain_sensor == 1:
-        return "CLOSE", "Cảm biến mưa phát hiện có mưa"
-
-    if prediction == "Mưa":
-        return "CLOSE", "AI dự đoán trời mưa"
-
-    if prediction == "Âm u" and humidity >= 88 and light < 250:
-        return "CLOSE", "Trời âm u, độ ẩm cao, ánh sáng thấp"
-
-    if prediction == "Nắng" and rain_sensor == 0:
-        return "OPEN", "Trời nắng, không phát hiện mưa"
-
-    return "CLOSE", "Điều kiện chưa rõ, đưa dàn phơi về trạng thái an toàn"
-
-
-# =========================================================
-# LIVE DATA FRAGMENT
-# =========================================================
-@st.fragment(run_every="2s")
-def live_sensor_fragment():
-    mqtt_payload, mqtt_error, mqtt_raw = mqtt_get_latest_sensor_data(timeout_sec=1.2)
-
-    if mqtt_payload is not None:
-        mqtt_row = mqtt_payload_to_row(mqtt_payload)
-
-        st.session_state.latest_data = mqtt_row
-        st.session_state.mqtt_payload = mqtt_payload
-        st.session_state.mqtt_error = None
-        st.session_state.data_source_name = "MQTT REALTIME"
-
-        st.session_state.live_df = pd.concat(
-            [st.session_state.live_df, pd.DataFrame([mqtt_row])],
-            ignore_index=True,
-        ).tail(100)
-
-        update_state_from_latest(mqtt_row)
-
-    else:
-        st.session_state.mqtt_error = mqtt_error
-
-    latest = pd.Series(st.session_state.latest_data)
-
-    if st.session_state.data_source_name == "MQTT REALTIME":
-        st.markdown(
-            '<div class="mqtt-live">ĐANG NHẬN DỮ LIỆU MQTT REALTIME TỪ ESP32</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            '<div class="mqtt-warn">CHƯA NHẬN ĐƯỢC MQTT, ĐANG DÙNG DỮ LIỆU DỰ PHÒNG</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown(
-        f'<div class="sub-title">Cập nhật: {latest["time"]}</div>',
-        unsafe_allow_html=True,
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
-        metric_card(
-            "Nhiệt độ",
-            f'{float(latest["temperature"]):.1f}°C',
-            st.session_state.data_source_name,
-            "wi wi-thermometer",
-            "#f5a623",
-            clamp(float(latest["temperature"]) / 45 * 100),
-        )
-
-    with c2:
-        metric_card(
-            "Độ ẩm",
-            f'{float(latest["humidity"]):.0f}%',
-            st.session_state.data_source_name,
-            "wi wi-humidity",
-            "#5b83ff",
-            latest["humidity"],
-        )
-
-    with c3:
-        metric_card(
-            "Áp suất",
-            f'{float(latest["pressure"]):.1f} hPa',
-            "BMP280",
-            "wi wi-barometer",
-            "#9a7dff",
-            clamp((float(latest["pressure"]) - 950) * 2),
-        )
-
-    with c4:
-        metric_card(
-            "Ánh sáng",
-            f'{float(latest["light"]):.0f} lux',
-            "Light sensor",
-            "wi wi-day-sunny",
-            "#f5a623",
-            clamp(float(latest["light"]) / 1000 * 100),
-        )
-
-    c5, c6, c7, c8 = st.columns(4)
-
-    with c5:
-        rain_text = "Có mưa" if int(latest["rain_sensor"]) == 1 else "Không mưa"
-
-        metric_card(
-            "Cảm biến mưa",
-            rain_text,
-            f'Raw: {latest.get("rain_raw", 0)} | {latest.get("rain_state", "UNKNOWN")}',
-            "wi wi-raindrop",
-            "#e74c3c" if int(latest["rain_sensor"]) == 1 else "#43b36a",
-            100 if int(latest["rain_sensor"]) == 1 else 10,
-        )
-
-    with c6:
-        gas_value = float(latest["gas"])
-        gas_alarm = bool(latest.get("gas_alarm", gas_value >= GAS_SAFE_LIMIT))
-        gas_status = "CẢNH BÁO" if gas_alarm else "AN TOÀN"
-
-        metric_card(
-            "Gas MQ-5",
-            f"{gas_value:.0f}",
-            f"{gas_status} | Ngưỡng {GAS_SAFE_LIMIT}",
-            "wi wi-smoke",
-            "#e74c3c" if gas_alarm else "#43b36a",
-            clamp(gas_value / 1000 * 100),
-        )
-
-    with c7:
-        pred = latest["ai_prediction"]
-        icon, color = weather_icon(pred)
-
-        metric_card(
-            "AI dự đoán",
-            pred,
-            "Nắng / Âm u / Mưa",
-            icon,
-            color,
-            80,
-        )
-
-    with c8:
-        metric_card(
-            "Chế độ ESP",
-            str(latest.get("mode", "UNKNOWN")),
-            f'Period: {latest.get("period", "UNKNOWN")}',
-            "wi wi-time-3",
-            "#43b36a" if str(latest.get("mode", "")).upper() == "AUTO" else "#f5a623",
-            80,
-        )
-
-    st.markdown('<div class="section-title">TRẠNG THÁI THIẾT BỊ</div>', unsafe_allow_html=True)
-
-    s1, s2 = st.columns(2)
-
-    with s1:
-        color = "#43b36a" if st.session_state.clothesline_state == "ĐANG MỞ" else "#e74c3c"
-        status_box(
-            "Trạng thái dàn phơi",
-            st.session_state.clothesline_state,
-            f'ESP: {latest.get("rack_state", "UNKNOWN")}',
-            color,
-        )
-
-    with s2:
-        color = "#43b36a" if st.session_state.door_state == "ĐANG MỞ" else "#e74c3c"
-        status_box(
-            "Trạng thái cửa",
-            st.session_state.door_state,
-            f'ESP: {latest.get("door_state", "UNKNOWN")}',
-            color,
-        )
-
-    auto_cmd, auto_reason = auto_decide_command(latest)
-
-    if auto_cmd == "CLOSE":
-        control_color = "#e74c3c"
-        control_icon = "wi wi-rain"
-        control_text = f"ĐÓNG {SERVO_CLOSE_ANGLE}°"
-    else:
-        control_color = "#43b36a"
-        control_icon = "wi wi-day-sunny"
-        control_text = f"MỞ {SERVO_OPEN_ANGLE}°"
-
-    metric_card(
-        "AI điều khiển dàn phơi",
-        control_text,
-        auto_reason,
-        control_icon,
-        control_color,
-        100,
-    )
-
-    if st.session_state.mqtt_error:
-        st.warning(f"Lỗi MQTT gần nhất: {st.session_state.mqtt_error}")
-
-
-# =========================================================
-# CHART FRAGMENT
-# =========================================================
-@st.fragment(run_every="6s")
-def chart_fragment():
-    fallback_df = load_fallback_data()
-
-    if not st.session_state.live_df.empty:
-        df = pd.concat([fallback_df, st.session_state.live_df], ignore_index=True)
-    else:
-        df = fallback_df
-
-    chart_df = df.tail(24).copy()
-    chart_df["time"] = pd.to_datetime(chart_df["time"])
-
-    min_temp = chart_df["temperature"].astype(float).min()
-    max_temp = chart_df["temperature"].astype(float).max()
-
-    y_bottom = min_temp - 1.5
-    y_top = max_temp + 1.8
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatter(
-            x=chart_df["time"],
-            y=[y_bottom] * len(chart_df),
-            mode="lines",
-            line=dict(width=0),
-            showlegend=False,
-            hoverinfo="skip",
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=chart_df["time"],
-            y=chart_df["temperature"],
-            mode="lines+markers+text",
-            text=[f"{float(v):.0f}°" for v in chart_df["temperature"]],
-            textposition="top center",
-            line=dict(
-                width=4,
-                color="rgba(255, 150, 150, 0.95)",
-                shape="spline",
-                smoothing=1.15,
-            ),
-            marker=dict(
-                size=8,
-                color="rgba(255, 130, 130, 1)",
-                line=dict(width=2, color="white"),
-            ),
-            fill="tonexty",
-            fillcolor="rgba(255, 150, 150, 0.22)",
-            showlegend=False,
-            hovertemplate="<b>%{x|%H:%M}</b><br>Nhiệt độ: %{y:.1f}°C<extra></extra>",
-        )
-    )
-
-    tick_df = chart_df.iloc[::3]
-
-    fig.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=35, b=20),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#f8f6f3",
-        showlegend=False,
-        autosize=True,
-        font=dict(
-            family="Segoe UI, Inter, Roboto, Arial, sans-serif",
-            size=13,
-            color="#2f3341",
-        ),
-        xaxis=dict(
-            title="",
-            showgrid=False,
-            tickmode="array",
-            tickvals=tick_df["time"],
-            ticktext=[t.strftime("%H:%M") for t in tick_df["time"]],
-            linecolor="rgba(0,0,0,0.08)",
-            tickfont=dict(size=13),
-            fixedrange=True,
-        ),
-        yaxis=dict(
-            title="NHIỆT ĐỘ °C",
-            range=[y_bottom, y_top],
-            showgrid=True,
-            gridcolor="rgba(0,0,0,0.06)",
-            zeroline=False,
-            tickfont=dict(size=12),
-            fixedrange=True,
-        ),
-    )
-
-    st.markdown(
-        '<div class="section-title">BIỂU ĐỒ NHIỆT ĐỘ & MƯA GẦN NHẤT</div>',
-        unsafe_allow_html=True,
-    )
-
-    with st.container(border=True):
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config={
-                "displayModeBar": False,
-                "responsive": True,
-            },
-        )
-
-        rain_data = chart_df.tail(8).reset_index(drop=True)
-        rain_cols = st.columns(8)
-
-        for i, row in rain_data.iterrows():
-            rain_text = "Có mưa" if int(row["rain_sensor"]) == 1 else "0%"
-            time_text = row["time"].strftime("%H:%M")
-
-            with rain_cols[i]:
-                st.markdown(
-                    f"""
-                    <div style="
-                        text-align:center;
-                        font-size:14px;
-                        color:#0076b6;
-                        margin-top:-6px;
-                        margin-bottom:10px;
-                        font-family:'Segoe UI', Arial, sans-serif;
-                    ">
-                        💧 {rain_text}
-                        <div style="color:#555; margin-top:6px; font-size:13px;">
-                            {time_text}
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-
-# =========================================================
-# INIT
-# =========================================================
-init_state()
-
-
-# =========================================================
-# SIDEBAR - KHÔNG AUTO REFRESH TOÀN TRANG
-# =========================================================
-st.sidebar.title("⚙️ CÀI ĐẶT HỆ THỐNG")
-
-st.sidebar.write("Broker:")
-st.sidebar.code(MQTT_BROKER)
-
-st.sidebar.write("Sensor topic:")
-st.sidebar.code(MQTT_TOPIC_SENSOR_DATA)
-
-st.sidebar.write("Rack topic:")
-st.sidebar.code(MQTT_TOPIC_CONTROL_RACK)
-
-st.sidebar.write("Door topic:")
-st.sidebar.code(MQTT_TOPIC_CONTROL_DOOR)
-
-st.sidebar.write("Mode topic:")
-st.sidebar.code(MQTT_TOPIC_CONTROL_MODE)
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("📡 ĐIỀU KHIỂN MQTT")
-
-if st.sidebar.button("CHUYỂN MANUAL", use_container_width=True):
-    ok, result = mqtt_set_manual_mode()
-    if ok:
-        st.sidebar.success("Đã gửi MANUAL")
-    else:
-        st.sidebar.error(f"Lỗi: {result}")
-
-if st.sidebar.button("CHUYỂN AUTO", use_container_width=True):
-    ok, result = mqtt_set_auto_mode()
-    if ok:
-        st.sidebar.success("Đã gửi AUTO")
-    else:
-        st.sidebar.error(f"Lỗi: {result}")
-
-st.sidebar.markdown("### ĐIỀU KHIỂN THỦ CÔNG")
-
-side_col1, side_col2 = st.sidebar.columns(2)
-
-with side_col1:
-    if st.button("MỞ 90°", use_container_width=True, key="side_open"):
-        ok, result = mqtt_open_rack()
-        if ok:
-            st.session_state.clothesline_state = "ĐANG MỞ"
-            st.session_state.last_manual_action = "MỞ DÀN PHƠI 90°"
-            st.sidebar.success("Đã gửi OPEN")
-        else:
-            st.sidebar.error(f"Lỗi: {result}")
-
-with side_col2:
-    if st.button("ĐÓNG 0°", use_container_width=True, key="side_close"):
-        ok, result = mqtt_close_rack()
-        if ok:
-            st.session_state.clothesline_state = "ĐANG ĐÓNG"
-            st.session_state.last_manual_action = "ĐÓNG DÀN PHƠI 0°"
-            st.sidebar.success("Đã gửi CLOSE")
-        else:
-            st.sidebar.error(f"Lỗi: {result}")
-
-if st.sidebar.button("MỞ CỬA MG90S", use_container_width=True, key="side_door"):
-    ok, result = mqtt_open_door()
-    if ok:
-        st.session_state.door_state = "ĐANG MỞ"
-        st.session_state.last_manual_action = "MỞ CỬA MG90S"
-        st.sidebar.success("Đã gửi DOOR OPEN")
-    else:
-        st.sidebar.error(f"Lỗi: {result}")
-
-st.sidebar.markdown("---")
-if st.session_state.mqtt_payload:
-    with st.sidebar.expander("Payload MQTT mới nhất"):
-        st.json(st.session_state.mqtt_payload)
-else:
-    st.sidebar.warning("Chưa có payload MQTT trong phiên này")
-
-
-# =========================================================
-# HEADER
-# =========================================================
-st.markdown(
-    '<div class="main-title">IOT WEATHER DASHBOARD - HỆ THỐNG PHƠI ĐỒ THÔNG MINH</div>',
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    '<div class="sub-title">Dữ liệu cảm biến tự cập nhật theo từng phần, không refresh toàn trang.</div>',
-    unsafe_allow_html=True,
-)
-
-
-# =========================================================
-# LIVE SENSOR SECTION - FRAGMENT
-# =========================================================
-st.markdown('<div class="section-title">DỮ LIỆU CẢM BIẾN REALTIME</div>', unsafe_allow_html=True)
-live_sensor_fragment()
-
-
-# =========================================================
-# CONTROL SECTION - KHÔNG NẰM TRONG FRAGMENT
-# =========================================================
-st.markdown('<div class="section-title">ĐIỀU KHIỂN THỦ CÔNG</div>', unsafe_allow_html=True)
-
-btn1, btn2, btn3 = st.columns(3)
-
-with btn1:
-    if st.button("MỞ DÀN PHƠI 90°", use_container_width=True, key="main_open"):
-        ok, result = mqtt_open_rack()
-
-        if ok:
-            st.session_state.clothesline_state = "ĐANG MỞ"
-            st.session_state.last_manual_action = "MỞ DÀN PHƠI 90°"
-            st.success("Đã gửi lệnh mở dàn phơi")
-        else:
-            st.error(f"Không gửi được MQTT: {result}")
-
-with btn2:
-    if st.button("ĐÓNG DÀN PHƠI 0°", use_container_width=True, key="main_close"):
-        ok, result = mqtt_close_rack()
-
-        if ok:
-            st.session_state.clothesline_state = "ĐANG ĐÓNG"
-            st.session_state.last_manual_action = "ĐÓNG DÀN PHƠI 0°"
-            st.success("Đã gửi lệnh đóng dàn phơi")
-        else:
-            st.error(f"Không gửi được MQTT: {result}")
-
-with btn3:
-    if st.button("MỞ CỬA MG90S", use_container_width=True, key="main_door_open"):
-        ok, result = mqtt_open_door()
-
-        if ok:
-            st.session_state.door_state = "ĐANG MỞ"
-            st.session_state.last_manual_action = "MỞ CỬA MG90S"
-            st.success("Đã gửi lệnh mở cửa MG90S")
-        else:
-            st.error(f"Không gửi được MQTT: {result}")
-
-st.info(f"Lệnh gần nhất: {st.session_state.last_manual_action}")
-
-
-# =========================================================
-# AI CONTROL SECTION
-# =========================================================
-st.markdown('<div class="section-title">AI ĐIỀU KHIỂN DÀN PHƠI</div>', unsafe_allow_html=True)
-
-latest = pd.Series(st.session_state.latest_data)
-auto_cmd, auto_reason = auto_decide_command(latest)
-
-ai_col1, ai_col2 = st.columns([2, 1])
-
-with ai_col1:
-    st.info(f"AI đề xuất: {auto_cmd}\n\nLý do: {auto_reason}")
-
-with ai_col2:
-    if st.button("GỬI LỆNH THEO AI", use_container_width=True):
-        mqtt_set_auto_mode()
-
-        if auto_cmd == "OPEN":
-            ok, result = mqtt_open_rack()
-        else:
-            ok, result = mqtt_close_rack()
-
-        if ok:
-            if auto_cmd == "OPEN":
-                st.session_state.clothesline_state = "ĐANG MỞ"
-            else:
-                st.session_state.clothesline_state = "ĐANG ĐÓNG"
-
-            st.session_state.last_manual_action = f"AI GỬI {auto_cmd}"
-            st.success(f"Đã gửi lệnh {auto_cmd}")
-        else:
-            st.error(f"Không gửi được MQTT: {result}")
-
-
-# =========================================================
-# CHART SECTION - FRAGMENT RIÊNG
-# =========================================================
-chart_fragment()
-
-
-# =========================================================
-# DATA TABLE
-# =========================================================
-with st.expander("Xem dữ liệu cảm biến đã lưu trong phiên"):
-    if not st.session_state.live_df.empty:
-        st.dataframe(st.session_state.live_df.tail(100), use_container_width=True)
-    else:
-        st.write("Chưa có dữ liệu realtime trong phiên này.")
-
-with st.expander("Format payload MQTT cần nhận"):
-    st.code(
-        """
-{
-  "temperature": 28.45,
-  "humidity": 70.12,
-  "pressure_hpa": 1007.25,
-  "light_lux": 325.50,
-  "rain_raw": 4095,
-  "rain_state": "NO_RAIN",
-  "gas_raw": 1200,
-  "gas_alarm": false,
-  "rack_state": "OPEN",
-  "door_state": "CLOSE",
-  "mode": "AUTO",
-  "period": "SANG"
+    if (light < 300) {
+        return "Âm u";
+    }
+
+    return "Nắng";
 }
-        """,
-        language="json",
-    )
+
+function updateAiIcon(label) {
+    const icon = el("aiIcon");
+
+    if (label === "Mưa") {
+        icon.className = "wi wi-rain";
+        icon.style.color = "#5b83ff";
+        setProgress("aiBar", 85, "#5b83ff");
+    } else if (label === "Âm u") {
+        icon.className = "wi wi-cloudy";
+        icon.style.color = "#f5a623";
+        setProgress("aiBar", 70, "#f5a623");
+    } else {
+        icon.className = "wi wi-day-sunny";
+        icon.style.color = "#f5a623";
+        setProgress("aiBar", 90, "#f5a623");
+    }
+}
+
+function decideAi(data) {
+    const rainState = String(data.rain_state || "NO_RAIN").toUpperCase();
+    const humidity = Number(data.humidity || 0);
+    const light = Number(data.light_lux || data.light || 0);
+    const label = weatherLabel(data);
+
+    if (rainState === "RAIN" || rainState === "RAINING") {
+        return {
+            command: "CLOSE",
+            reason: "Cảm biến mưa phát hiện có mưa"
+        };
+    }
+
+    if (label === "Mưa") {
+        return {
+            command: "CLOSE",
+            reason: "AI dự đoán trời mưa"
+        };
+    }
+
+    if (label === "Âm u" && humidity >= 88 && light < 250) {
+        return {
+            command: "CLOSE",
+            reason: "Trời âm u, độ ẩm cao, ánh sáng thấp"
+        };
+    }
+
+    if (label === "Nắng" && rainState !== "RAIN") {
+        return {
+            command: "OPEN",
+            reason: "Trời nắng, không phát hiện mưa"
+        };
+    }
+
+    return {
+        command: "CLOSE",
+        reason: "Điều kiện chưa rõ, đưa dàn phơi về trạng thái an toàn"
+    };
+}
+
+function updateRackState(state) {
+    const s = String(state || "CLOSE").toUpperCase();
+    el("rackRaw").innerText = s;
+
+    if (s === "OPEN") {
+        el("rackState").innerText = "ĐANG MỞ";
+        el("rackIcon").className = "wi wi-day-sunny";
+        el("rackIcon").style.color = "#43b36a";
+        setProgress("rackBar", 100, "#43b36a");
+    } else {
+        el("rackState").innerText = "ĐANG ĐÓNG";
+        el("rackIcon").className = "wi wi-rain";
+        el("rackIcon").style.color = "#e74c3c";
+        setProgress("rackBar", 100, "#e74c3c");
+    }
+}
+
+function updateDoorState(state) {
+    const s = String(state || "CLOSE").toUpperCase();
+    el("doorRaw").innerText = s;
+
+    if (s === "OPEN") {
+        el("doorState").innerText = "ĐANG MỞ";
+        el("doorIcon").className = "wi wi-direction-up";
+        el("doorIcon").style.color = "#43b36a";
+        setProgress("doorBar", 100, "#43b36a");
+    } else {
+        el("doorState").innerText = "ĐANG ĐÓNG";
+        el("doorIcon").className = "wi wi-direction-down";
+        el("doorIcon").style.color = "#e74c3c";
+        setProgress("doorBar", 100, "#e74c3c");
+    }
+}
+
+function updateRain(data) {
+    const rainState = String(data.rain_state || "NO_RAIN").toUpperCase();
+    const rainRaw = data.rain_raw ?? "--";
+
+    el("rainRaw").innerText = "Raw: " + rainRaw + " | " + rainState;
+
+    if (rainState === "RAIN" || rainState === "RAINING") {
+        el("rainState").innerText = "Có mưa";
+        el("rainIcon").style.color = "#e74c3c";
+        setProgress("rainBar", 100, "#e74c3c");
+    } else {
+        el("rainState").innerText = "Không mưa";
+        el("rainIcon").style.color = "#43b36a";
+        setProgress("rainBar", 10, "#43b36a");
+    }
+}
+
+function updateGas(data) {
+    const gas = Number(data.gas_raw || data.gas || 0);
+    const gasAlarm = Boolean(data.gas_alarm);
+    const status = gasAlarm ? "CẢNH BÁO" : "AN TOÀN";
+    const color = gasAlarm ? "#e74c3c" : "#43b36a";
+
+    el("gas").innerText = gas.toFixed(0);
+    el("gasStatus").innerText = "Trạng thái: " + status;
+    el("gasIcon").style.color = color;
+    setProgress("gasBar", gas / 1000 * 100, color);
+}
+
+function updateMode(data) {
+    const mode = String(data.mode || "UNKNOWN").toUpperCase();
+    const period = String(data.period || "UNKNOWN").toUpperCase();
+
+    el("mode").innerText = mode;
+    el("period").innerText = period;
+
+    if (mode === "AUTO") {
+        setProgress("modeBar", 90, "#43b36a");
+    } else if (mode === "MANUAL") {
+        setProgress("modeBar", 70, "#f5a623");
+    } else {
+        setProgress("modeBar", 40, "#9a7dff");
+    }
+}
+
+function updateCards(data) {
+    latestData = data;
+
+    const temperature = Number(data.temperature || 0);
+    const humidity = Number(data.humidity || 0);
+    const pressure = Number(data.pressure_hpa || data.pressure || 0);
+    const light = Number(data.light_lux || data.light || 0);
+
+    el("temperature").innerText = temperature.toFixed(1) + "°C";
+    el("humidity").innerText = humidity.toFixed(0) + "%";
+    el("pressure").innerText = pressure.toFixed(1) + " hPa";
+    el("light").innerText = light.toFixed(0) + " lux";
+
+    setProgress("temperatureBar", temperature / 45 * 100, "#f5a623");
+    setProgress("humidityBar", humidity, "#5b83ff");
+    setProgress("pressureBar", (pressure - 950) * 2, "#9a7dff");
+    setProgress("lightBar", light / 1000 * 100, "#f5a623");
+
+    updateRain(data);
+    updateGas(data);
+    updateRackState(data.rack_state || "CLOSE");
+    updateDoorState(data.door_state || "CLOSE");
+    updateMode(data);
+
+    const label = weatherLabel(data);
+    el("aiPrediction").innerText = label;
+    updateAiIcon(label);
+
+    const ai = decideAi(data);
+    lastAiCommand = ai.command;
+    el("aiDecision").innerText = "AI đề xuất: " + ai.command + " | " + ai.reason;
+
+    el("lastUpdate").innerText = nowText();
+    el("rawPayload").innerText = JSON.stringify(data, null, 2);
+
+    updateChart(temperature);
+}
+
+const chartCtx = document.getElementById("tempChart").getContext("2d");
+
+const tempChart = new Chart(chartCtx, {
+    type: "line",
+    data: {
+        labels: tempLabels,
+        datasets: [{
+            label: "Nhiệt độ °C",
+            data: tempValues,
+            borderWidth: 4,
+            tension: 0.35,
+            fill: true,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            borderColor: "rgba(255, 150, 150, 0.95)",
+            backgroundColor: "rgba(255, 150, 150, 0.22)"
+        }]
+    },
+    options: {
+        responsive: true,
+        animation: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            x: {
+                grid: {
+                    display: false
+                }
+            },
+            y: {
+                grid: {
+                    color: "rgba(0,0,0,0.06)"
+                }
+            }
+        }
+    }
+});
+
+function updateChart(temp) {
+    const label = new Date().toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
+
+    tempLabels.push(label);
+    tempValues.push(temp);
+
+    if (tempLabels.length > MAX_POINTS) {
+        tempLabels.shift();
+        tempValues.shift();
+    }
+
+    tempChart.update();
+}
+
+function publish(topic, message, successText) {
+    if (!mqttClient || !mqttClient.connected) {
+        el("lastCommand").innerText = "Lỗi: MQTT chưa kết nối";
+        return;
+    }
+
+    mqttClient.publish(topic, message, {
+        qos: 0,
+        retain: false
+    });
+
+    el("lastCommand").innerText = "Lệnh gần nhất: " + successText + " | Topic: " + topic + " | Message: " + message;
+}
+
+function setButtonsDisabled(disabled) {
+    const ids = [
+        "btnOpenRack",
+        "btnCloseRack",
+        "btnOpenDoor",
+        "btnCloseDoor",
+        "btnManual",
+        "btnAuto",
+        "btnAiSend"
+    ];
+
+    ids.forEach(function(id) {
+        el(id).disabled = disabled;
+    });
+}
+
+function setupButtons() {
+    el("btnOpenRack").addEventListener("click", function() {
+        publish(TOPIC_RACK, "OPEN", "MỞ DÀN PHƠI 90°");
+        updateRackState("OPEN");
+    });
+
+    el("btnCloseRack").addEventListener("click", function() {
+        publish(TOPIC_RACK, "CLOSE", "ĐÓNG DÀN PHƠI 0°");
+        updateRackState("CLOSE");
+    });
+
+    el("btnOpenDoor").addEventListener("click", function() {
+        publish(TOPIC_DOOR, "OPEN", "MỞ CỬA MG90S");
+        updateDoorState("OPEN");
+    });
+
+    el("btnCloseDoor").addEventListener("click", function() {
+        publish(TOPIC_DOOR, "CLOSE", "ĐÓNG CỬA MG90S");
+        updateDoorState("CLOSE");
+    });
+
+    el("btnManual").addEventListener("click", function() {
+        publish(TOPIC_MODE, "MANUAL", "CHUYỂN MANUAL");
+        el("mode").innerText = "MANUAL";
+    });
+
+    el("btnAuto").addEventListener("click", function() {
+        publish(TOPIC_MODE, "AUTO", "CHUYỂN AUTO");
+        el("mode").innerText = "AUTO";
+    });
+
+    el("btnAiSend").addEventListener("click", function() {
+        publish(TOPIC_MODE, "AUTO", "CHUYỂN AUTO THEO AI");
+
+        if (lastAiCommand === "OPEN") {
+            publish(TOPIC_RACK, "OPEN", "AI GỬI OPEN");
+            updateRackState("OPEN");
+        } else {
+            publish(TOPIC_RACK, "CLOSE", "AI GỬI CLOSE");
+            updateRackState("CLOSE");
+        }
+    });
+}
+
+function connectMqtt() {
+    setButtonsDisabled(true);
+
+    el("mqttDetail").innerText = "Broker: " + MQTT_WS_URL;
+
+    const options = {
+        username: MQTT_USERNAME,
+        password: MQTT_PASSWORD,
+        clean: true,
+        protocolVersion: 4,
+        connectTimeout: 5000,
+        reconnectPeriod: 2000
+    };
+
+    mqttClient = mqtt.connect(MQTT_WS_URL, options);
+
+    mqttClient.on("connect", function() {
+        setBadge("ĐÃ KẾT NỐI MQTT WEBSOCKET", "badge-ok");
+        el("mqttDetail").innerText = "Đã subscribe: " + TOPIC_SENSOR;
+        mqttClient.subscribe(TOPIC_SENSOR, {
+            qos: 0
+        });
+        setButtonsDisabled(false);
+    });
+
+    mqttClient.on("reconnect", function() {
+        setBadge("ĐANG KẾT NỐI LẠI...", "badge-wait");
+        setButtonsDisabled(true);
+    });
+
+    mqttClient.on("close", function() {
+        setBadge("MẤT KẾT NỐI MQTT", "badge-error");
+        setButtonsDisabled(true);
+    });
+
+    mqttClient.on("error", function(err) {
+        setBadge("LỖI MQTT", "badge-error");
+        el("mqttDetail").innerText = "Lỗi: " + err.message;
+        console.error(err);
+    });
+
+    mqttClient.on("message", function(topic, message) {
+        try {
+            const text = message.toString();
+            const data = JSON.parse(text);
+            updateCards(data);
+        } catch (e) {
+            console.error("Payload parse error:", e);
+            el("rawPayload").innerText = "Payload parse error: " + e.message + "\\n" + message.toString();
+        }
+    });
+}
+
+setupButtons();
+connectMqtt();
+</script>
+
+</body>
+</html>
+""")
+
+
+html_code = html_template.substitute(
+    MQTT_WS_URL=json.dumps(MQTT_WS_URL),
+    MQTT_USERNAME=json.dumps(MQTT_USERNAME),
+    MQTT_PASSWORD=json.dumps(MQTT_PASSWORD),
+    TOPIC_SENSOR=json.dumps(MQTT_TOPIC_SENSOR_DATA),
+    TOPIC_RACK=json.dumps(MQTT_TOPIC_CONTROL_RACK),
+    TOPIC_DOOR=json.dumps(MQTT_TOPIC_CONTROL_DOOR),
+    TOPIC_MODE=json.dumps(MQTT_TOPIC_CONTROL_MODE),
+)
+
+html(html_code, height=1200, scrolling=True)
