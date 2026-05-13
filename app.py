@@ -60,7 +60,7 @@ MQTT_USERNAME = "ESP32-client"
 
 # Nên đặt MQTT_PASSWORD trong Streamlit Secrets.
 # Nếu chưa dùng secrets, thay YOUR_MQTT_PASSWORD bằng mật khẩu MQTT thật.
-MQTT_PASSWORD = st.secrets["MQTT_PASSWORD"] if "MQTT_PASSWORD" in st.secrets else "YOUR_MQTT_PASSWORD"
+MQTT_PASSWORD = st.secrets["MQTT_PASSWORD"] if "MQTT_PASSWORD" in st.secrets else "Tan01052005!"
 
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
 MQTT_TOPIC_CONTROL_RACK = "smart_home/control/rack"
