@@ -19,9 +19,9 @@ st.markdown(
     """
     <style>
         .block-container {
-            padding-top: 0.8rem !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
+            padding-top: 0.6rem !important;
+            padding-left: 0.8rem !important;
+            padding-right: 0.8rem !important;
             padding-bottom: 0rem !important;
             max-width: 100% !important;
         }
@@ -44,7 +44,7 @@ st.markdown(
 
 
 # =========================
-# RENDER AI API CONFIG
+# API CONFIG
 # =========================
 AI_API_BASE = "https://weather-model-api.onrender.com"
 
@@ -58,7 +58,9 @@ MQTT_WS_PATH = "/mqtt"
 
 MQTT_USERNAME = "ESP32-client"
 
-MQTT_PASSWORD = st.secrets["MQTT_PASSWORD"] if "MQTT_PASSWORD" in st.secrets else "Tan01052005!"
+# Nên đặt MQTT_PASSWORD trong Streamlit Secrets.
+# Nếu chưa dùng secrets, thay YOUR_MQTT_PASSWORD bằng mật khẩu MQTT thật.
+MQTT_PASSWORD = st.secrets["MQTT_PASSWORD"] if "MQTT_PASSWORD" in st.secrets else "YOUR_MQTT_PASSWORD"
 
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
 MQTT_TOPIC_CONTROL_RACK = "smart_home/control/rack"
@@ -89,7 +91,6 @@ html_template = Template(r"""
             margin: 0;
             padding: 0;
             width: 100%;
-            min-height: 100%;
             background: #eef0f3;
             color: #2f3341;
             overflow-x: hidden;
@@ -97,49 +98,47 @@ html_template = Template(r"""
 
         .page {
             width: 100%;
-            max-width: none;
             margin: 0;
-            padding: 18px 18px 32px 18px;
+            padding: 18px;
         }
 
         .hero {
-            background: linear-gradient(135deg, #f7f1ea 0%, #eef3ff 100%);
+            background: linear-gradient(135deg, #f7f1ea 0%, #edf2ff 100%);
             border-radius: 30px;
-            padding: 22px 24px;
+            padding: 24px 26px;
             box-shadow: 0 12px 28px rgba(0,0,0,0.06);
-            margin-bottom: 18px;
+            margin-bottom: 24px;
             display: grid;
-            grid-template-columns: 1.7fr 1fr;
-            gap: 18px;
+            grid-template-columns: 1.65fr 1fr;
+            gap: 22px;
             align-items: center;
         }
 
         .title {
-            font-size: 32px;
-            font-weight: 900;
+            font-size: 34px;
+            font-weight: 950;
             line-height: 1.2;
             text-transform: uppercase;
-            letter-spacing: -0.6px;
+            letter-spacing: -0.7px;
         }
 
         .hero-meta {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
-            margin-top: 14px;
+            margin-top: 16px;
         }
 
         .pill {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 7px;
             border-radius: 999px;
-            padding: 9px 13px;
+            padding: 9px 15px;
             background: rgba(255,255,255,0.85);
             color: #535866;
             font-size: 13px;
-            font-weight: 800;
+            font-weight: 850;
         }
 
         .pill-ok {
@@ -159,14 +158,14 @@ html_template = Template(r"""
 
         .hero-ai {
             background: rgba(255,255,255,0.76);
-            border-radius: 24px;
-            padding: 18px 18px;
-            min-height: 142px;
+            border-radius: 26px;
+            padding: 22px;
+            min-height: 150px;
         }
 
         .hero-ai-title {
             font-size: 14px;
-            font-weight: 900;
+            font-weight: 950;
             text-transform: uppercase;
             color: #74777f;
         }
@@ -175,58 +174,153 @@ html_template = Template(r"""
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
-            margin-top: 12px;
+            gap: 14px;
+            margin-top: 14px;
         }
 
         .hero-ai-value {
-            font-size: 34px;
+            font-size: 36px;
             font-weight: 950;
-            letter-spacing: -0.7px;
-        }
-
-        .hero-ai-icon {
-            width: 66px;
-            height: 66px;
-            border-radius: 22px;
-            background: #fff7e8;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .hero-ai-icon i {
-            font-size: 34px;
-            color: #f5a623;
+            letter-spacing: -0.8px;
         }
 
         .hero-ai-sub {
             margin-top: 10px;
             color: #2f4a8a;
             font-size: 14px;
-            font-weight: 800;
+            font-weight: 850;
             line-height: 1.45;
         }
 
+        .hero-ai-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 24px;
+            background: #fff7e8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .hero-ai-icon i {
+            font-size: 36px;
+            color: #f5a623;
+        }
+
         .section-title {
-            font-size: 22px;
-            font-weight: 900;
+            font-size: 23px;
+            font-weight: 950;
             text-transform: uppercase;
-            margin: 22px 0 13px 0;
+            margin: 24px 0 14px 0;
             color: #2f3341;
             letter-spacing: -0.3px;
+        }
+
+        .forecast-card,
+        .control-card,
+        .chart-card {
+            background: #f7f1ea;
+            border-radius: 30px;
+            padding: 20px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.045);
+            margin-bottom: 18px;
+        }
+
+        .forecast-top {
+            display: grid;
+            grid-template-columns: 1.25fr 2.1fr;
+            gap: 16px;
+            align-items: stretch;
+        }
+
+        .current-weather {
+            background: rgba(255,255,255,0.72);
+            border-radius: 26px;
+            padding: 20px;
+            min-height: 190px;
+        }
+
+        .current-location {
+            font-size: 15px;
+            font-weight: 950;
+            color: #3c4050;
+        }
+
+        .current-main {
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .current-main i {
+            font-size: 60px;
+            color: #f5a623;
+        }
+
+        .current-temp {
+            font-size: 52px;
+            font-weight: 950;
+            letter-spacing: -1px;
+        }
+
+        .current-label {
+            margin-top: 6px;
+            font-size: 18px;
+            font-weight: 900;
+            color: #3c4050;
+        }
+
+        .daily-list {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .day-item {
+            background: rgba(255,255,255,0.72);
+            border-radius: 24px;
+            padding: 16px 12px;
+            min-height: 190px;
+            text-align: center;
+        }
+
+        .day-name {
+            font-size: 14px;
+            font-weight: 950;
+            color: #3c4050;
+        }
+
+        .day-date {
+            margin-top: 4px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #7a7f8c;
+        }
+
+        .day-icon {
+            margin-top: 14px;
+            font-size: 36px;
+            color: #f5a623;
+        }
+
+        .day-temp {
+            margin-top: 14px;
+            font-size: 18px;
+            font-weight: 950;
+        }
+
+        .day-rain {
+            margin-top: 5px;
+            font-size: 12px;
+            font-weight: 850;
+            color: #5b83ff;
         }
 
         .grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 16px;
-        }
-
-        .grid-2 {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 14px;
             margin-bottom: 16px;
         }
@@ -248,7 +342,7 @@ html_template = Template(r"""
 
         .card-title {
             font-size: 14px;
-            font-weight: 900;
+            font-weight: 950;
             text-transform: uppercase;
             color: #3c4050;
         }
@@ -270,7 +364,7 @@ html_template = Template(r"""
 
         .value {
             font-size: 31px;
-            font-weight: 900;
+            font-weight: 950;
             margin-top: 14px;
             word-break: break-word;
             letter-spacing: -0.6px;
@@ -280,7 +374,7 @@ html_template = Template(r"""
             color: #74777f;
             font-size: 13px;
             margin-top: 4px;
-            font-weight: 650;
+            font-weight: 700;
         }
 
         .progress-wrap {
@@ -296,113 +390,6 @@ html_template = Template(r"""
             height: 100%;
             border-radius: 999px;
             transition: width 0.25s ease, background 0.25s ease;
-        }
-
-        .forecast-card {
-            background: #f7f1ea;
-            border-radius: 28px;
-            padding: 18px;
-            box-shadow: 0 8px 22px rgba(0,0,0,0.045);
-            margin-bottom: 16px;
-        }
-
-        .forecast-top {
-            display: grid;
-            grid-template-columns: 1.2fr 2fr;
-            gap: 14px;
-            align-items: stretch;
-        }
-
-        .current-weather {
-            background: rgba(255,255,255,0.72);
-            border-radius: 24px;
-            padding: 18px;
-            min-height: 180px;
-        }
-
-        .current-location {
-            font-size: 15px;
-            font-weight: 900;
-            color: #3c4050;
-        }
-
-        .current-main {
-            margin-top: 18px;
-            display: flex;
-            align-items: center;
-            gap: 18px;
-        }
-
-        .current-main i {
-            font-size: 56px;
-            color: #f5a623;
-        }
-
-        .current-temp {
-            font-size: 48px;
-            font-weight: 950;
-            letter-spacing: -1px;
-        }
-
-        .current-label {
-            margin-top: 6px;
-            font-size: 17px;
-            font-weight: 850;
-            color: #3c4050;
-        }
-
-        .daily-list {
-            display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
-            gap: 12px;
-        }
-
-        .day-item {
-            background: rgba(255,255,255,0.72);
-            border-radius: 24px;
-            padding: 16px 12px;
-            min-height: 180px;
-            text-align: center;
-        }
-
-        .day-name {
-            font-size: 14px;
-            font-weight: 900;
-            color: #3c4050;
-        }
-
-        .day-date {
-            margin-top: 4px;
-            font-size: 12px;
-            font-weight: 750;
-            color: #7a7f8c;
-        }
-
-        .day-icon {
-            margin-top: 14px;
-            font-size: 34px;
-            color: #f5a623;
-        }
-
-        .day-temp {
-            margin-top: 14px;
-            font-size: 18px;
-            font-weight: 900;
-        }
-
-        .day-rain {
-            margin-top: 5px;
-            font-size: 12px;
-            font-weight: 800;
-            color: #5b83ff;
-        }
-
-        .control-card, .chart-card {
-            background: #f7f1ea;
-            border-radius: 28px;
-            padding: 20px;
-            box-shadow: 0 8px 22px rgba(0,0,0,0.045);
-            margin-bottom: 16px;
         }
 
         .button-row {
@@ -423,7 +410,7 @@ html_template = Template(r"""
             border-radius: 18px;
             padding: 15px 12px;
             font-size: 15px;
-            font-weight: 900;
+            font-weight: 950;
             cursor: pointer;
             color: white;
             transition: transform 0.12s ease, opacity 0.12s ease;
@@ -466,7 +453,7 @@ html_template = Template(r"""
             border-radius: 17px;
             padding: 12px 14px;
             font-size: 14px;
-            font-weight: 800;
+            font-weight: 850;
             margin-top: 12px;
         }
 
@@ -509,7 +496,10 @@ html_template = Template(r"""
                 font-size: 24px;
             }
 
-            .grid, .grid-2, .button-row, .button-row-2, .daily-list {
+            .grid,
+            .button-row,
+            .button-row-2,
+            .daily-list {
                 grid-template-columns: 1fr;
             }
 
@@ -765,15 +755,12 @@ function updateAiIcon(label) {
     if (label === "Mưa" || label === "Mưa rào" || label === "Dông") {
         icon.className = "wi wi-rain";
         icon.style.color = "#5b83ff";
-        setProgress("aiBar", 85, "#5b83ff");
     } else if (label === "Âm u" || label === "Ít mây") {
         icon.className = "wi wi-cloudy";
         icon.style.color = "#f5a623";
-        setProgress("aiBar", 70, "#f5a623");
     } else {
         icon.className = "wi wi-day-sunny";
         icon.style.color = "#f5a623";
-        setProgress("aiBar", 90, "#f5a623");
     }
 }
 
@@ -843,7 +830,6 @@ function updateGas(data) {
 function updateMode(data) {
     const mode = String(data.mode || "UNKNOWN").toUpperCase();
     const period = String(data.period || "UNKNOWN").toUpperCase();
-
     el("heroMode").innerText = mode + " / " + period;
 }
 
@@ -897,6 +883,7 @@ const tempChart = new Chart(chartCtx, {
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         animation: false,
         plugins: {
             legend: {
@@ -1072,17 +1059,31 @@ async function loadForecast(force = false) {
 
     try {
         const res = await fetch(AI_API_BASE + "/forecast?days=5");
+
+        if (!res.ok) {
+            el("currentWeather").innerText = "Chưa có dữ liệu";
+            el("currentMore").innerText = "Kiểm tra API dự báo";
+            return;
+        }
+
         const json = await res.json();
 
         if (!json.ok) {
+            el("currentWeather").innerText = "Không lấy được dự báo";
+            el("currentMore").innerText = "API trả về lỗi";
             return;
         }
 
         el("forecastLocation").innerText = json.location || "Hanoi, Vietnam";
 
         const current = json.current || {};
-        el("currentTemp").innerText = Number(current.temperature || 0).toFixed(0) + "°C";
-        el("currentWeather").innerText = current.weather || "--";
+
+        el("currentTemp").innerText =
+            Number(current.temperature || 0).toFixed(0) + "°C";
+
+        el("currentWeather").innerText =
+            current.weather || "--";
+
         el("currentMore").innerText =
             "Độ ẩm: " + Number(current.humidity || 0).toFixed(0) + "% | " +
             "Áp suất: " + Number(current.pressure || 0).toFixed(1) + " hPa";
@@ -1090,10 +1091,10 @@ async function loadForecast(force = false) {
         el("currentIcon").className = iconClass(current.icon);
 
         const daily = json.daily || [];
-        let html = "";
+        let forecastHtml = "";
 
         daily.slice(0, 5).forEach(function(day) {
-            html += ""
+            forecastHtml += ""
                 + "<div class='day-item'>"
                 + "<div class='day-name'>" + (day.day_name || "--") + "</div>"
                 + "<div class='day-date'>" + (day.date || "--") + "</div>"
@@ -1108,10 +1109,23 @@ async function loadForecast(force = false) {
                 + "</div>";
         });
 
-        el("dailyForecast").innerHTML = html;
+        if (forecastHtml === "") {
+            forecastHtml = ""
+                + "<div class='day-item'>"
+                + "<div class='day-name'>--</div>"
+                + "<div class='day-date'>--</div>"
+                + "<div class='day-icon'><i class='wi wi-day-cloudy'></i></div>"
+                + "<div class='day-temp'>-- / --</div>"
+                + "<div class='day-rain'>Mưa: --</div>"
+                + "</div>";
+        }
+
+        el("dailyForecast").innerHTML = forecastHtml;
 
     } catch (err) {
         console.error("Forecast API error:", err);
+        el("currentWeather").innerText = "Lỗi dự báo";
+        el("currentMore").innerText = "Không gọi được API dự báo";
     }
 }
 
@@ -1240,4 +1254,4 @@ html_code = html_template.substitute(
     AI_API_BASE=json.dumps(AI_API_BASE),
 )
 
-html(html_code, height=1750, scrolling=False)
+html(html_code, height=3000, scrolling=True)
