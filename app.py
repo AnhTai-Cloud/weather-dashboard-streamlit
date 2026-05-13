@@ -26,7 +26,7 @@ st.set_page_config(
 # AUTO REFRESH
 # =========================
 st_autorefresh(
-    interval=5000,
+    interval=10000,
     key="mqtt_auto_refresh"
 )
 
