@@ -62,8 +62,18 @@ st.markdown(
 
 st.markdown("""
 <style>
-* {
-    font-family: Arial, Helvetica, sans-serif !important;
+html, body, .stApp, .main-title, .sub-title, .metric-card, .section-title, .control-note {
+    font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif !important;
+}
+
+button, input, textarea, select, div, p, span {
+    font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif;
+}
+
+/* Không ép font chữ thường vào icon */
+i[class^="wi"], i[class*=" wi-"] {
+    font-family: "weathericons" !important;
+    font-style: normal !important;
 }
 
 .stApp {
@@ -82,11 +92,12 @@ section[data-testid="stSidebar"] {
 
 .main-title {
     font-size: 30px;
-    font-weight: 900;
-    letter-spacing: 0.8px;
+    font-weight: 850;
+    letter-spacing: 0.15px;
     color: #2f3341;
     margin-bottom: 6px;
     text-transform: uppercase;
+    line-height: 1.28;
 }
 
 .sub-title {
@@ -112,8 +123,8 @@ section[data-testid="stSidebar"] {
 
 .metric-title {
     font-size: 15px;
-    font-weight: 900;
-    letter-spacing: 0.5px;
+    font-weight: 850;
+    letter-spacing: 0.15px;
     text-transform: uppercase;
 }
 
@@ -133,7 +144,7 @@ section[data-testid="stSidebar"] {
 
 .metric-value {
     font-size: 30px;
-    font-weight: 900;
+    font-weight: 850;
     margin-top: 14px;
 }
 
@@ -159,11 +170,12 @@ section[data-testid="stSidebar"] {
 
 .section-title {
     font-size: 24px;
-    font-weight: 900;
-    letter-spacing: 0.6px;
+    font-weight: 850;
+    letter-spacing: 0.15px;
     text-transform: uppercase;
     margin: 24px 0 14px 0;
     color: #2f3341;
+    line-height: 1.3;
 }
 
 .control-note {
@@ -507,8 +519,13 @@ def main_iot_weather_card(df, latest):
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
 
         <style>
-            * {{
-                font-family: Arial, Helvetica, sans-serif !important;
+            body, .card, .place, .updated, .action, .temp, .condition, .desc, .reason, .pill, .day-name, .day-temp, .time-label {{
+                font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif !important;
+            }}
+
+            i[class^="wi"], i[class*=" wi-"] {{
+                font-family: "weathericons" !important;
+                font-style: normal !important;
             }}
 
             body {{
@@ -533,9 +550,9 @@ def main_iot_weather_card(df, latest):
 
             .place {{
                 font-size: 18px;
-                font-weight: 900;
+                font-weight: 850;
                 text-transform: uppercase;
-                letter-spacing: 0.5px;
+                letter-spacing: 0.1px;
             }}
 
             .updated {{
@@ -547,12 +564,12 @@ def main_iot_weather_card(df, latest):
             .action {{
                 background: {action_color};
                 color: white;
-                font-weight: 900;
+                font-weight: 850;
                 border-radius: 999px;
                 padding: 9px 14px;
                 font-size: 13px;
                 text-transform: uppercase;
-                letter-spacing: 0.4px;
+                letter-spacing: 0.1px;
             }}
 
             .main {{
@@ -581,13 +598,13 @@ def main_iot_weather_card(df, latest):
 
             .temp {{
                 font-size: 58px;
-                font-weight: 900;
+                font-weight: 850;
                 line-height: 1;
             }}
 
             .condition {{
                 font-size: 22px;
-                font-weight: 900;
+                font-weight: 850;
                 text-transform: uppercase;
             }}
 
@@ -640,7 +657,7 @@ def main_iot_weather_card(df, latest):
             }}
 
             .day-name {{
-                font-weight: 900;
+                font-weight: 850;
                 font-size: 13px;
                 margin-bottom: 7px;
             }}
@@ -822,7 +839,7 @@ def render_big_temperature_chart(df):
         showlegend=False,
         autosize=True,
         font=dict(
-            family="Arial, Helvetica, sans-serif",
+            family="Segoe UI, Inter, Roboto, Arial, sans-serif",
             size=13,
             color="#2f3341"
         ),
@@ -878,7 +895,7 @@ def render_big_temperature_chart(df):
                         color:#0076b6;
                         margin-top:-6px;
                         margin-bottom:10px;
-                        font-family:Arial, Helvetica, sans-serif;
+                        font-family:'Segoe UI', Arial, sans-serif;
                     ">
                         💧 {rain_text}
                         <div style="
