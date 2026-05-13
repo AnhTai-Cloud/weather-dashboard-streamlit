@@ -28,6 +28,21 @@ DATA_SOURCE = "data.csv"
 
 
 # =========================
+# MQTT CONFIG - FIX CỨNG HIVEMQ CLOUD
+# =========================
+MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491adf.s1.eu.hivemq.cloud"
+MQTT_PORT = 8883
+
+MQTT_USERNAME = "anhtai"
+MQTT_PASSWORD = "31102005Tai@"
+
+MQTT_CLIENT_ID = "streamlit_weather_dashboard"
+MQTT_TOPIC_DATA = "iot/clothesline/data"
+MQTT_TOPIC_CMD = "iot/clothesline/cmd"
+MQTT_DEVICE_ID = "esp32_clothesline_01"
+
+
+# =========================
 # CSS
 # =========================
 st.markdown(
@@ -148,7 +163,7 @@ def weather_icon(label):
     if "mưa" in label or "rain" in label:
         return "wi wi-rain", "#5b83ff"
 
-    if "âm" in label or "cloud" in label or "u" in label:
+    if "âm" in label or "cloud" in label:
         return "wi wi-cloudy", "#f5a623"
 
     if "nắng" in label or "clear" in label or "sun" in label:
@@ -182,44 +197,20 @@ def metric_card(title, value, desc, icon_class, color, percent):
 
 
 # =========================
-# MQTT CONFIG - HIVEMQ CLOUD
+# MQTT FUNCTIONS
 # =========================
 def get_mqtt_config():
-    """
-    Ưu tiên đọc từ Streamlit Secrets.
-    Nếu chưa có Secrets thì dùng cấu hình mặc định bên dưới.
-    """
-
-    try:
-        return {
-            "broker": st.secrets["mqtt"]["broker"],
-            "port": int(st.secrets["mqtt"]["port"]),
-            "username": st.secrets["mqtt"]["username"],
-            "password": st.secrets["mqtt"]["password"],
-            "client_id": st.secrets["mqtt"].get("client_id", "streamlit_weather_dashboard"),
-            "topic_data": st.secrets["mqtt"].get("topic_data", "iot/clothesline/data"),
-            "topic_cmd": st.secrets["mqtt"].get("topic_cmd", "iot/clothesline/cmd"),
-            "device_id": st.secrets["mqtt"].get("device_id", "esp32_clothesline_01"),
-            "tls": bool(st.secrets["mqtt"].get("tls", True)),
-        }
-
-    except Exception:
-        return {
-            # Sửa broker này cho đúng cluster HiveMQ Cloud của bạn nếu khác
-            "broker": "0d3cdfd1bb6411ead82b3fc9491adf.s1.eu.hivemq.cloud",
-            "port": 8883,
-
-            # Không nên hardcode tài khoản thật trong code public GitHub
-            # Nên điền trong Secrets của Streamlit Cloud
-            "username": "",
-            "password": "",
-
-            "client_id": "streamlit_weather_dashboard",
-            "topic_data": "iot/clothesline/data",
-            "topic_cmd": "iot/clothesline/cmd",
-            "device_id": "esp32_clothesline_01",
-            "tls": True,
-        }
+    return {
+        "broker": MQTT_BROKER,
+        "port": MQTT_PORT,
+        "username": MQTT_USERNAME,
+        "password": MQTT_PASSWORD,
+        "client_id": MQTT_CLIENT_ID,
+        "topic_data": MQTT_TOPIC_DATA,
+        "topic_cmd": MQTT_TOPIC_CMD,
+        "device_id": MQTT_DEVICE_ID,
+        "tls": True,
+    }
 
 
 def mqtt_publish(command, reason="Manual control from dashboard"):
@@ -244,7 +235,10 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
     }
 
     try:
-        connected = {"ok": False, "rc": None}
+        connected = {
+            "ok": False,
+            "rc": None
+        }
 
         def on_connect(client, userdata, flags, rc):
             connected["rc"] = rc
@@ -264,11 +258,15 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
             cfg["password"]
         )
 
-        client.tls_set()
+        # HiveMQ Cloud dùng TLS port 8883
+        client.tls_set(
+            cert_reqs=ssl.CERT_REQUIRED,
+            tls_version=ssl.PROTOCOL_TLS_CLIENT
+        )
 
         client.connect(
             cfg["broker"],
-            int(cfg["port"]),
+            cfg["port"],
             keepalive=60
         )
 
@@ -281,6 +279,7 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         if not connected["ok"]:
             client.loop_stop()
             client.disconnect()
+
             return False, {
                 "error": "MQTT connect failed",
                 "connect_rc": connected["rc"],
@@ -815,7 +814,7 @@ with col_open:
             st.sidebar.error("Không gửi được MQTT")
 
         st.sidebar.json(result)
-        
+
 with col_close:
     if st.button("CẤT", use_container_width=True):
         ok, result = mqtt_publish("CLOSE", "Người dùng bấm cất dàn phơi")
@@ -826,16 +825,16 @@ with col_close:
             st.sidebar.error("Không gửi được MQTT")
 
         st.sidebar.json(result)
-        
+
 if st.sidebar.button("DỪNG SERVO", use_container_width=True):
     ok, result = mqtt_publish("STOP", "Người dùng bấm dừng servo")
 
     if ok:
         st.sidebar.success("Đã gửi lệnh STOP")
-        st.sidebar.json(result)
     else:
         st.sidebar.error("Không gửi được MQTT")
-        st.sidebar.write(result)
+
+    st.sidebar.json(result)
 
 
 # =========================
@@ -864,10 +863,10 @@ if control_mode == "Tự động theo AI":
             if ok:
                 st.session_state.last_auto_command = current_key
                 st.sidebar.success(f"Đã tự động gửi lệnh {auto_cmd}")
-                st.sidebar.json(result)
             else:
                 st.sidebar.error("Không gửi được MQTT")
-                st.sidebar.write(result)
+
+            st.sidebar.json(result)
         else:
             st.sidebar.caption("Lệnh này đã được gửi, không gửi lặp lại.")
 
@@ -999,32 +998,35 @@ with right:
     with btn1:
         if st.button("MỞ", use_container_width=True, key="main_open"):
             ok, result = mqtt_publish("OPEN", "Người dùng bấm mở dàn phơi trên dashboard")
+
             if ok:
                 st.success("Đã gửi lệnh OPEN")
-                st.json(result)
             else:
                 st.error("Không gửi được MQTT")
-                st.write(result)
+
+            st.json(result)
 
     with btn2:
         if st.button("CẤT", use_container_width=True, key="main_close"):
             ok, result = mqtt_publish("CLOSE", "Người dùng bấm cất dàn phơi trên dashboard")
+
             if ok:
                 st.success("Đã gửi lệnh CLOSE")
-                st.json(result)
             else:
                 st.error("Không gửi được MQTT")
-                st.write(result)
+
+            st.json(result)
 
     with btn3:
         if st.button("DỪNG", use_container_width=True, key="main_stop"):
             ok, result = mqtt_publish("STOP", "Người dùng bấm dừng servo trên dashboard")
+
             if ok:
                 st.success("Đã gửi lệnh STOP")
-                st.json(result)
             else:
                 st.error("Không gửi được MQTT")
-                st.write(result)
+
+            st.json(result)
 
     st.markdown('<div class="section-title">Biểu đồ cảm biến</div>', unsafe_allow_html=True)
 
