@@ -233,7 +233,22 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
 
+    debug = {
+        "broker": cfg["broker"],
+        "port": cfg["port"],
+        "topic": cfg["topic_cmd"],
+        "tls": cfg["tls"],
+        "username": cfg["username"],
+        "payload": payload
+    }
+
     try:
+        connected = {"ok": False, "rc": None}
+
+        def on_connect(client, userdata, flags, rc):
+            connected["rc"] = rc
+            connected["ok"] = (rc == 0)
+
         client_id = cfg["client_id"] + "_" + str(int(time.time()))
 
         client = mqtt.Client(
@@ -241,26 +256,36 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
             protocol=mqtt.MQTTv311
         )
 
-        if cfg["username"] != "":
-            client.username_pw_set(
-                cfg["username"],
-                cfg["password"]
-            )
+        client.on_connect = on_connect
 
-        # HiveMQ Cloud bắt buộc dùng TLS qua port 8883
-        if cfg["tls"] or cfg["port"] == 8883:
-            client.tls_set(
-                cert_reqs=ssl.CERT_REQUIRED,
-                tls_version=ssl.PROTOCOL_TLS_CLIENT
-            )
+        client.username_pw_set(
+            cfg["username"],
+            cfg["password"]
+        )
+
+        client.tls_set()
 
         client.connect(
             cfg["broker"],
-            cfg["port"],
+            int(cfg["port"]),
             keepalive=60
         )
 
         client.loop_start()
+
+        # Chờ kết nối thật sự
+        start_time = time.time()
+        while connected["rc"] is None and time.time() - start_time < 5:
+            time.sleep(0.1)
+
+        if not connected["ok"]:
+            client.loop_stop()
+            client.disconnect()
+            return False, {
+                "error": "MQTT connect failed",
+                "connect_rc": connected["rc"],
+                "debug": debug
+            }
 
         msg_info = client.publish(
             cfg["topic_cmd"],
@@ -276,16 +301,22 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
 
         if msg_info.rc == mqtt.MQTT_ERR_SUCCESS:
             return True, {
-                "broker": cfg["broker"],
-                "port": cfg["port"],
-                "topic": cfg["topic_cmd"],
-                "payload": payload
+                "status": "published",
+                "debug": debug
             }
 
-        return False, f"Publish failed, rc={msg_info.rc}"
+        return False, {
+            "error": "Publish failed",
+            "publish_rc": msg_info.rc,
+            "debug": debug
+        }
 
     except Exception as e:
-        return False, f"{type(e).__name__}: {e}"
+        return False, {
+            "error": str(e),
+            "type": type(e).__name__,
+            "debug": debug
+        }
 
 
 def auto_decide_command(latest):
@@ -780,22 +811,22 @@ with col_open:
 
         if ok:
             st.sidebar.success("Đã gửi lệnh OPEN")
-            st.sidebar.json(result)
         else:
             st.sidebar.error("Không gửi được MQTT")
-            st.sidebar.write(result)
 
+        st.sidebar.json(result)
+        
 with col_close:
     if st.button("CẤT", use_container_width=True):
         ok, result = mqtt_publish("CLOSE", "Người dùng bấm cất dàn phơi")
 
         if ok:
             st.sidebar.success("Đã gửi lệnh CLOSE")
-            st.sidebar.json(result)
         else:
             st.sidebar.error("Không gửi được MQTT")
-            st.sidebar.write(result)
 
+        st.sidebar.json(result)
+        
 if st.sidebar.button("DỪNG SERVO", use_container_width=True):
     ok, result = mqtt_publish("STOP", "Người dùng bấm dừng servo")
 
