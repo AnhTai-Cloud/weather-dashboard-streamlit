@@ -4,6 +4,9 @@ import numpy as np
 import plotly.express as px
 from streamlit.components.v1 import html as components_html
 from datetime import datetime, timedelta
+import json
+import time
+import paho.mqtt.client as mqtt
 
 
 # =========================
@@ -244,6 +247,94 @@ def load_data():
                 df[col] = 0
 
     return df
+    # =========================
+# MQTT CONFIG
+# =========================
+def get_mqtt_config():
+    try:
+        return {
+            "broker": st.secrets["mqtt"]["broker"],
+            "port": int(st.secrets["mqtt"]["port"]),
+            "username": st.secrets["mqtt"].get("username", ""),
+            "password": st.secrets["mqtt"].get("password", ""),
+            "client_id": st.secrets["mqtt"].get("client_id", "streamlit_dashboard"),
+            "topic_data": st.secrets["mqtt"].get("topic_data", "iot/clothesline/data"),
+            "topic_cmd": st.secrets["mqtt"].get("topic_cmd", "iot/clothesline/cmd"),
+            "device_id": st.secrets["mqtt"].get("device_id", "esp32_clothesline_01"),
+        }
+    except Exception:
+        return {
+            "broker": "broker.emqx.io",
+            "port": 1883,
+            "username": "",
+            "password": "",
+            "client_id": "streamlit_dashboard",
+            "topic_data": "iot/clothesline/data",
+            "topic_cmd": "iot/clothesline/cmd",
+            "device_id": "esp32_clothesline_01",
+        }
+
+
+def mqtt_publish(command, reason="Manual control from dashboard"):
+    cfg = get_mqtt_config()
+
+    payload = {
+        "device": cfg["device_id"],
+        "command": command,
+        "source": "streamlit",
+        "reason": reason,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    client = mqtt.Client(
+        client_id=cfg["client_id"] + "_pub",
+        protocol=mqtt.MQTTv311
+    )
+
+    if cfg["username"] != "":
+        client.username_pw_set(cfg["username"], cfg["password"])
+
+    try:
+        client.connect(cfg["broker"], cfg["port"], 60)
+        client.loop_start()
+
+        result = client.publish(
+            cfg["topic_cmd"],
+            json.dumps(payload),
+            qos=1,
+            retain=False
+        )
+
+        result.wait_for_publish(timeout=5)
+
+        client.loop_stop()
+        client.disconnect()
+
+        return True, payload
+
+    except Exception as e:
+        return False, str(e)
+
+
+def auto_decide_command(latest):
+    rain_sensor = int(latest["rain_sensor"])
+    prediction = str(latest["ai_prediction"])
+    humidity = float(latest["humidity"])
+    light = float(latest["light"])
+
+    if rain_sensor == 1:
+        return "CLOSE", "Cảm biến mưa phát hiện có mưa"
+
+    if prediction == "Mưa":
+        return "CLOSE", "AI dự đoán trời mưa"
+
+    if prediction == "Âm u" and humidity >= 88 and light < 250:
+        return "CLOSE", "Trời âm u, độ ẩm cao, ánh sáng thấp"
+
+    if prediction == "Nắng" and rain_sensor == 0:
+        return "OPEN", "Trời nắng, không phát hiện mưa"
+
+    return "STOP", "Điều kiện chưa rõ, giữ trạng thái hiện tại"
 
 
 # =========================
@@ -609,7 +700,81 @@ rain_sensor
 weather_label
 ai_prediction
 """)
+# =========================
+# MQTT CONTROL SIDEBAR
+# =========================
+st.sidebar.markdown("---")
+st.sidebar.subheader("📡 Điều khiển MQTT")
 
+mqtt_cfg = get_mqtt_config()
+
+st.sidebar.write("Broker:")
+st.sidebar.code(mqtt_cfg["broker"])
+
+st.sidebar.write("Topic CMD:")
+st.sidebar.code(mqtt_cfg["topic_cmd"])
+
+control_mode = st.sidebar.radio(
+    "Chế độ điều khiển",
+    ["Thủ công", "Tự động theo AI"]
+)
+
+st.sidebar.markdown("### Điều khiển thủ công")
+
+col_open, col_close = st.sidebar.columns(2)
+
+with col_open:
+    if st.button("MỞ", use_container_width=True):
+        ok, result = mqtt_publish("OPEN", "Người dùng bấm mở dàn phơi")
+        if ok:
+            st.sidebar.success("Đã gửi lệnh OPEN")
+        else:
+            st.sidebar.error(f"Lỗi MQTT: {result}")
+
+with col_close:
+    if st.button("CẤT", use_container_width=True):
+        ok, result = mqtt_publish("CLOSE", "Người dùng bấm cất dàn phơi")
+        if ok:
+            st.sidebar.success("Đã gửi lệnh CLOSE")
+        else:
+            st.sidebar.error(f"Lỗi MQTT: {result}")
+
+if st.sidebar.button("DỪNG SERVO", use_container_width=True):
+    ok, result = mqtt_publish("STOP", "Người dùng bấm dừng servo")
+    if ok:
+        st.sidebar.success("Đã gửi lệnh STOP")
+    else:
+        st.sidebar.error(f"Lỗi MQTT: {result}")
+# =========================
+# AUTO CONTROL THEO AI
+# =========================
+if "last_auto_command" not in st.session_state:
+    st.session_state.last_auto_command = None
+
+if control_mode == "Tự động theo AI":
+    auto_cmd, auto_reason = auto_decide_command(latest)
+
+    st.sidebar.markdown("### 🤖 AI đề xuất")
+    st.sidebar.info(f"Lệnh: {auto_cmd}\n\nLý do: {auto_reason}")
+
+    auto_send = st.sidebar.checkbox(
+        "Cho phép tự động gửi lệnh về ESP",
+        value=False
+    )
+
+    if auto_send:
+        current_key = f"{auto_cmd}_{latest['time']}"
+
+        if st.session_state.last_auto_command != current_key:
+            ok, result = mqtt_publish(auto_cmd, auto_reason)
+
+            if ok:
+                st.session_state.last_auto_command = current_key
+                st.sidebar.success(f"Đã tự động gửi lệnh {auto_cmd}")
+            else:
+                st.sidebar.error(f"Lỗi MQTT: {result}")
+        else:
+            st.sidebar.caption("Lệnh này đã được gửi, không gửi lặp lại.")
 
 # =========================
 # HEADER
@@ -704,6 +869,34 @@ with right:
             color,
             80
         )
+# =========================
+# HIỂN THỊ TRẠNG THÁI ĐIỀU KHIỂN SERVO
+# =========================
+auto_cmd, auto_reason = auto_decide_command(latest)
+
+if auto_cmd == "CLOSE":
+    control_color = "#e74c3c"
+    control_icon = "wi wi-rain"
+    control_text = "CẤT ĐỒ"
+
+elif auto_cmd == "OPEN":
+    control_color = "#43b36a"
+    control_icon = "wi wi-day-sunny"
+    control_text = "MỞ DÀN PHƠI"
+
+else:
+    control_color = "#f5a623"
+    control_icon = "wi wi-na"
+    control_text = "GIỮ NGUYÊN"
+
+metric_card(
+    "Điều khiển servo",
+    control_text,
+    auto_reason,
+    control_icon,
+    control_color,
+    100
+)
 
     st.markdown('<div class="section-title">Biểu đồ cảm biến</div>', unsafe_allow_html=True)
 
