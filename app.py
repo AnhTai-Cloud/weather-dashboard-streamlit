@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import textwrap
+from streamlit.components.v1 import html as components_html
 
 
 # =========================
@@ -81,84 +82,6 @@ section[data-testid="stSidebar"] {
     margin-bottom: 20px;
 }
 
-.hero-card {
-    background: var(--card);
-    border-radius: 28px;
-    padding: 26px 28px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.055);
-    margin-bottom: 18px;
-}
-
-.hero-place {
-    font-size: 19px;
-    font-weight: 850;
-    color: var(--text);
-}
-
-.hero-small {
-    font-size: 14px;
-    color: var(--muted);
-    margin-top: 4px;
-}
-
-.hero-main {
-    display: flex;
-    align-items: center;
-    gap: 26px;
-    margin-top: 20px;
-}
-
-.hero-icon {
-    font-size: 92px;
-    color: var(--orange);
-    min-width: 110px;
-    text-align: center;
-}
-
-.hero-temp {
-    font-size: 68px;
-    font-weight: 850;
-    line-height: 1;
-    color: var(--text);
-}
-
-.hero-cond {
-    font-size: 23px;
-    font-weight: 850;
-    color: var(--text);
-    margin-top: 6px;
-}
-
-.hero-feel {
-    color: var(--muted);
-    font-size: 15px;
-    margin-top: 6px;
-}
-
-.badge-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 18px;
-}
-
-.info-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #fff;
-    border-radius: 999px;
-    padding: 8px 12px;
-    font-size: 13px;
-    color: var(--text);
-    box-shadow: 0 3px 10px rgba(0,0,0,0.04);
-}
-
-.info-badge i {
-    color: var(--orange);
-    font-size: 16px;
-}
-
 .section-title {
     font-size: 24px;
     font-weight: 850;
@@ -226,84 +149,6 @@ section[data-testid="stSidebar"] {
 .progress-fill {
     height: 100%;
     border-radius: 999px;
-}
-
-.hour-card {
-    background: #fff;
-    border-radius: 18px;
-    padding: 12px 8px;
-    min-height: 126px;
-    text-align: center;
-    box-shadow: 0 5px 14px rgba(0,0,0,0.045);
-    margin-bottom: 10px;
-}
-
-.hour-time {
-    font-size: 14px;
-    font-weight: 850;
-    color: var(--text);
-}
-
-.hour-icon {
-    font-size: 30px;
-    color: var(--orange);
-    margin: 10px 0 8px 0;
-}
-
-.hour-temp {
-    font-size: 18px;
-    font-weight: 850;
-    color: var(--text);
-}
-
-.hour-rain {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 4px;
-}
-
-.daily-card {
-    background: var(--card);
-    border-radius: 18px;
-    padding: 14px 8px;
-    min-height: 170px;
-    text-align: center;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.045);
-}
-
-.daily-day {
-    font-size: 14px;
-    font-weight: 850;
-    color: var(--text);
-}
-
-.daily-date {
-    font-size: 13px;
-    color: var(--muted);
-    margin-top: 3px;
-}
-
-.daily-icon {
-    font-size: 40px;
-    color: var(--orange);
-    margin: 12px 0 10px 0;
-}
-
-.daily-max {
-    font-size: 23px;
-    font-weight: 850;
-    color: var(--text);
-}
-
-.daily-min {
-    font-size: 14px;
-    color: var(--muted);
-}
-
-.daily-rain {
-    margin-top: 8px;
-    font-size: 13px;
-    color: var(--muted);
 }
 </style>
 """)
@@ -384,6 +229,358 @@ def metric_card(title, value, desc, icon_class, color, percent):
     </div>
 </div>
 """
+
+
+# =========================
+# BING STYLE MAIN CARD
+# =========================
+def bing_main_weather_card(
+    display_city,
+    current,
+    daily,
+    hourly,
+    temp_now,
+    feels,
+    unit,
+    weather_text,
+    weather_icon
+):
+    daily_rows = []
+
+    for i, row in daily.head(6).reset_index(drop=True).iterrows():
+        _, icon = weather_code_to_text(row["weather_code"])
+
+        if i == 0:
+            day_label = "Today"
+        else:
+            day_label = row["time"].strftime("%a %d")
+
+        daily_rows.append(f"""
+        <div class="bing-day">
+            <div class="bing-day-name">{day_label}</div>
+            <div class="bing-day-icon"><i class="{icon}"></i></div>
+            <div class="bing-day-temp">
+                {row["temp_max_show"]:.0f}° {row["temp_min_show"]:.0f}°
+            </div>
+        </div>
+        """)
+
+    daily_html = "".join(daily_rows)
+
+    chart_data = hourly.head(8).copy().reset_index(drop=True)
+
+    temps = chart_data["temperature_show"].tolist()
+    rains = chart_data["precipitation_probability"].tolist()
+    times = [t.strftime("%I %p").lstrip("0") for t in chart_data["time"]]
+
+    min_t = min(temps)
+    max_t = max(temps)
+    temp_range = max(max_t - min_t, 1)
+
+    width = 720
+    height = 160
+    left_pad = 38
+    right_pad = 28
+    top_pad = 22
+    bottom_pad = 52
+
+    usable_w = width - left_pad - right_pad
+    usable_h = height - top_pad - bottom_pad
+
+    points = []
+    temp_labels_html = ""
+    rain_labels_html = ""
+
+    for i, temp in enumerate(temps):
+        x = left_pad + i * usable_w / (len(temps) - 1)
+        y = top_pad + (max_t - temp) / temp_range * usable_h
+        points.append((x, y))
+
+        temp_labels_html += f"""
+        <div class="temp-label" style="left:{x - 10}px; top:{y - 24}px;">
+            {temp:.0f}°
+        </div>
+        """
+
+        rain_labels_html += f"""
+        <div class="rain-label" style="left:{x - 20}px;">
+            <span class="drop">💧</span>{rains[i]:.0f}%
+            <div class="time-label">{times[i]}</div>
+        </div>
+        """
+
+    polyline_points = " ".join([f"{x},{y}" for x, y in points])
+    area_points = (
+        f"{left_pad},{height-bottom_pad} "
+        + polyline_points
+        + f" {width-right_pad},{height-bottom_pad}"
+    )
+
+    wind_dir = wind_direction_text(current["wind_direction_10m"])
+
+    if unit == "°C":
+        active_c = "unit-active"
+        active_f = "unit-off"
+    else:
+        active_c = "unit-off"
+        active_f = "unit-active"
+
+    html_code = f"""
+    <html>
+    <head>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
+
+        <style>
+            body {{
+                margin: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                background: transparent;
+                color: #2f2f35;
+            }}
+
+            .bing-card {{
+                width: 100%;
+                background: #f3eee8;
+                border-radius: 26px;
+                overflow: hidden;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+            }}
+
+            .top {{
+                padding: 22px 24px 10px 24px;
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+            }}
+
+            .place {{
+                font-size: 18px;
+                font-weight: 800;
+            }}
+
+            .updated {{
+                margin-top: 6px;
+                font-size: 13px;
+                color: #777;
+            }}
+
+            .unit-switch {{
+                display: flex;
+                gap: 8px;
+                font-weight: 700;
+                font-size: 14px;
+            }}
+
+            .unit-active {{
+                background: #6c6c6c;
+                color: white;
+                border-radius: 6px;
+                padding: 7px 10px;
+            }}
+
+            .unit-off {{
+                color: #555;
+                padding: 7px 2px;
+            }}
+
+            .main-weather {{
+                padding: 4px 24px 12px 24px;
+                display: flex;
+                align-items: center;
+                gap: 22px;
+            }}
+
+            .main-icon {{
+                font-size: 82px;
+                color: #f6a623;
+                width: 92px;
+                text-align: center;
+            }}
+
+            .weather-text-area {{
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+            }}
+
+            .temp-condition-row {{
+                display: flex;
+                align-items: center;
+                gap: 24px;
+            }}
+
+            .main-temp {{
+                font-size: 58px;
+                font-weight: 850;
+                line-height: 1;
+            }}
+
+            .condition {{
+                font-size: 22px;
+                font-weight: 800;
+            }}
+
+            .hi-lo {{
+                margin-top: 8px;
+                color: #555;
+                font-size: 15px;
+            }}
+
+            .mini-info {{
+                display: flex;
+                gap: 10px;
+                margin-top: 12px;
+                flex-wrap: wrap;
+            }}
+
+            .mini-pill {{
+                background: white;
+                border-radius: 999px;
+                padding: 7px 11px;
+                font-size: 13px;
+                color: #444;
+            }}
+
+            .mini-pill i {{
+                color: #f6a623;
+                margin-right: 6px;
+            }}
+
+            .daily-row {{
+                display: grid;
+                grid-template-columns: repeat(6, 1fr);
+                margin: 8px 0 0 0;
+                background: rgba(255,255,255,0.44);
+            }}
+
+            .bing-day {{
+                padding: 13px 8px 12px 8px;
+                text-align: center;
+                border-right: 1px solid rgba(0,0,0,0.035);
+            }}
+
+            .bing-day:first-child {{
+                background: rgba(255,255,255,0.75);
+                border-radius: 12px 12px 0 0;
+            }}
+
+            .bing-day-name {{
+                font-size: 14px;
+                font-weight: 800;
+                margin-bottom: 8px;
+            }}
+
+            .bing-day-icon {{
+                font-size: 31px;
+                color: #f6a623;
+                margin-bottom: 7px;
+            }}
+
+            .bing-day-temp {{
+                font-size: 14px;
+                color: #555;
+            }}
+
+            .chart-wrap {{
+                position: relative;
+                height: 178px;
+                background: #f8f6f3;
+                padding-top: 4px;
+            }}
+
+            .chart-svg {{
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }}
+
+            .temp-label {{
+                position: absolute;
+                font-size: 13px;
+                color: #666;
+            }}
+
+            .rain-label {{
+                position: absolute;
+                bottom: 16px;
+                font-size: 13px;
+                color: #0076b6;
+                text-align: center;
+                min-width: 42px;
+            }}
+
+            .time-label {{
+                color: #555;
+                margin-top: 9px;
+                font-size: 13px;
+            }}
+
+            .drop {{
+                font-size: 10px;
+                margin-right: 2px;
+            }}
+        </style>
+    </head>
+
+    <body>
+        <div class="bing-card">
+            <div class="top">
+                <div>
+                    <div class="place">{display_city}, Vietnam</div>
+                    <div class="updated">Updated a few minutes ago</div>
+                </div>
+
+                <div class="unit-switch">
+                    <div class="{active_f}">°F</div>
+                    <div class="{active_c}">°C</div>
+                </div>
+            </div>
+
+            <div class="main-weather">
+                <div class="main-icon">
+                    <i class="{weather_icon}"></i>
+                </div>
+
+                <div class="weather-text-area">
+                    <div class="temp-condition-row">
+                        <div class="main-temp">{temp_now:.0f}{unit}</div>
+                        <div class="condition">{weather_text}</div>
+                    </div>
+
+                    <div class="hi-lo">
+                        Feels like {feels:.0f}{unit} · Humidity {current["relative_humidity_2m"]}% · Wind {current["wind_speed_10m"]:.0f} km/h {wind_dir}
+                    </div>
+
+                    <div class="mini-info">
+                        <div class="mini-pill"><i class="wi wi-humidity"></i>{current["relative_humidity_2m"]}% humidity</div>
+                        <div class="mini-pill"><i class="wi wi-strong-wind"></i>{current["wind_speed_10m"]:.0f} km/h wind</div>
+                        <div class="mini-pill"><i class="wi wi-raindrop"></i>{current["rain"]:.1f} mm rain</div>
+                        <div class="mini-pill"><i class="wi wi-cloudy"></i>{current["cloud_cover"]}% cloud</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="daily-row">
+                {daily_html}
+            </div>
+
+            <div class="chart-wrap">
+                <svg class="chart-svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
+                    <polygon points="{area_points}" fill="rgba(255, 138, 138, 0.25)"></polygon>
+                    <polyline points="{polyline_points}" fill="none" stroke="rgba(245, 155, 155, 0.70)" stroke-width="3"></polyline>
+                    <line x1="{left_pad}" y1="{height-bottom_pad}" x2="{width-right_pad}" y2="{height-bottom_pad}" stroke="#ddd" stroke-width="1"></line>
+                </svg>
+
+                {temp_labels_html}
+                {rain_labels_html}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    components_html(html_code, height=575)
 
 
 # =========================
@@ -502,8 +699,6 @@ else:
     daily["temp_min_show"] = daily["temperature_2m_min"]
 
 weather_text, weather_icon = weather_code_to_text(current["weather_code"])
-
-next_12h = hourly.head(12)
 next_24h = hourly.head(24)
 
 
@@ -522,127 +717,17 @@ render_html(f"""
 left, right = st.columns([1.35, 1])
 
 with left:
-    # HERO CARD
-    render_html(f"""
-<div class="hero-card">
-    <div class="hero-place">{display_city}, Vietnam</div>
-    <div class="hero-small">Current weather</div>
-
-    <div class="hero-main">
-        <div class="hero-icon">
-            <i class="{weather_icon}"></i>
-        </div>
-
-        <div>
-            <div class="hero-temp">{temp_now:.0f}{unit}</div>
-            <div class="hero-cond">{weather_text}</div>
-            <div class="hero-feel">Feels like {feels:.0f}{unit}</div>
-
-            <div class="badge-row">
-                <div class="info-badge">
-                    <i class="wi wi-humidity"></i>
-                    Humidity {current["relative_humidity_2m"]}%
-                </div>
-
-                <div class="info-badge">
-                    <i class="wi wi-strong-wind"></i>
-                    Wind {current["wind_speed_10m"]:.0f} km/h
-                </div>
-
-                <div class="info-badge">
-                    <i class="wi wi-raindrop"></i>
-                    Rain {current["rain"]:.1f} mm
-                </div>
-
-                <div class="info-badge">
-                    <i class="wi wi-cloudy"></i>
-                    Cloud {current["cloud_cover"]}%
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-""")
-
-    # HOURLY FORECAST
-    render_html('<div class="section-title">Dự báo 12 giờ tới</div>')
-
-    row1 = st.columns(6)
-    for i, row in next_12h.iloc[:6].reset_index(drop=True).iterrows():
-        _, icon = weather_code_to_text(row["weather_code"])
-        hour_label = row["time"].strftime("%H:%M")
-
-        with row1[i]:
-            render_html(f"""
-<div class="hour-card">
-    <div class="hour-time">{hour_label}</div>
-    <div class="hour-icon"><i class="{icon}"></i></div>
-    <div class="hour-temp">{row["temperature_show"]:.0f}{unit}</div>
-    <div class="hour-rain">Rain {row["precipitation_probability"]:.0f}%</div>
-</div>
-""")
-
-    row2 = st.columns(6)
-    for i, row in next_12h.iloc[6:12].reset_index(drop=True).iterrows():
-        _, icon = weather_code_to_text(row["weather_code"])
-        hour_label = row["time"].strftime("%H:%M")
-
-        with row2[i]:
-            render_html(f"""
-<div class="hour-card">
-    <div class="hour-time">{hour_label}</div>
-    <div class="hour-icon"><i class="{icon}"></i></div>
-    <div class="hour-temp">{row["temperature_show"]:.0f}{unit}</div>
-    <div class="hour-rain">Rain {row["precipitation_probability"]:.0f}%</div>
-</div>
-""")
-
-    # DAILY FORECAST
-    render_html('<div class="section-title">Dự báo 7 ngày</div>')
-
-    day_cols = st.columns(7)
-    for i, row in daily.reset_index(drop=True).iterrows():
-        _, icon = weather_code_to_text(row["weather_code"])
-        day_name = row["time"].strftime("%a")
-        day_num = row["time"].strftime("%d")
-
-        with day_cols[i]:
-            render_html(f"""
-<div class="daily-card">
-    <div class="daily-day">{day_name}</div>
-    <div class="daily-date">{day_num}</div>
-    <div class="daily-icon"><i class="{icon}"></i></div>
-    <div class="daily-max">{row["temp_max_show"]:.0f}{unit}</div>
-    <div class="daily-min">/ {row["temp_min_show"]:.0f}{unit}</div>
-    <div class="daily-rain">
-        <i class="wi wi-raindrop"></i> {row["precipitation_probability_max"]:.0f}%
-    </div>
-</div>
-""")
-
-    # TEMP CHART
-    render_html('<div class="section-title">Biểu đồ nhiệt độ 24 giờ tới</div>')
-
-    fig_temp = px.line(
-        next_24h,
-        x="time",
-        y="temperature_show",
-        markers=True,
-        labels={
-            "time": "Thời gian",
-            "temperature_show": f"Nhiệt độ {unit}"
-        }
+    bing_main_weather_card(
+        display_city=display_city,
+        current=current,
+        daily=daily,
+        hourly=hourly,
+        temp_now=temp_now,
+        feels=feels,
+        unit=unit,
+        weather_text=weather_text,
+        weather_icon=weather_icon
     )
-
-    fig_temp.update_layout(
-        height=320,
-        margin=dict(l=10, r=10, t=20, b=10),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#f3eee8"
-    )
-
-    st.plotly_chart(fig_temp, use_container_width=True)
-
 
 with right:
     visibility_km = hourly["visibility"].iloc[0] / 1000
