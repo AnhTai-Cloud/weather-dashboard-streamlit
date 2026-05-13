@@ -30,11 +30,11 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - FIX CỨNG HIVEMQ CLOUD
 # =========================
-MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491a1df.s1.eu.hivemq.cloud"
+MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491adf.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883
 
 MQTT_USERNAME = "anhtai"
-MQTT_PASSWORD = "31102005Tai@"
+MQTT_PASSWORD = "NHAP_MAT_KHAU_HIVEMQ_CUA_BAN"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 MQTT_TOPIC_DATA = "iot/clothesline/data"
@@ -62,6 +62,10 @@ st.markdown(
 
 st.markdown("""
 <style>
+* {
+    font-family: Arial, Helvetica, sans-serif !important;
+}
+
 .stApp {
     background: #eef0f3;
     color: #2f3341;
@@ -69,7 +73,7 @@ st.markdown("""
 
 .block-container {
     max-width: 1320px;
-    padding-top: 1.6rem;
+    padding-top: 1.4rem;
 }
 
 section[data-testid="stSidebar"] {
@@ -77,10 +81,12 @@ section[data-testid="stSidebar"] {
 }
 
 .main-title {
-    font-size: 32px;
-    font-weight: 850;
+    font-size: 30px;
+    font-weight: 900;
+    letter-spacing: 0.8px;
     color: #2f3341;
     margin-bottom: 6px;
+    text-transform: uppercase;
 }
 
 .sub-title {
@@ -105,8 +111,10 @@ section[data-testid="stSidebar"] {
 }
 
 .metric-title {
-    font-size: 16px;
-    font-weight: 850;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
 }
 
 .metric-icon-box {
@@ -124,14 +132,14 @@ section[data-testid="stSidebar"] {
 }
 
 .metric-value {
-    font-size: 31px;
-    font-weight: 850;
+    font-size: 30px;
+    font-weight: 900;
     margin-top: 14px;
 }
 
 .metric-desc {
     color: #74777f;
-    font-size: 14px;
+    font-size: 13px;
     margin-top: 4px;
 }
 
@@ -150,9 +158,12 @@ section[data-testid="stSidebar"] {
 }
 
 .section-title {
-    font-size: 26px;
-    font-weight: 850;
-    margin: 26px 0 14px 0;
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin: 24px 0 14px 0;
+    color: #2f3341;
 }
 
 .control-note {
@@ -162,34 +173,6 @@ section[data-testid="stSidebar"] {
     color: #2f3341;
     margin-bottom: 12px;
     box-shadow: 0 6px 16px rgba(0,0,0,0.04);
-}
-
-.big-chart-card {
-    background: #f3eee8;
-    border-radius: 28px;
-    padding: 22px 24px 12px 24px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.055);
-    margin-top: 24px;
-    margin-bottom: 20px;
-}
-
-.rain-row {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 6px;
-    margin-top: -8px;
-    padding: 0 12px 8px 12px;
-}
-
-.rain-item {
-    text-align: center;
-    font-size: 15px;
-    color: #0076b6;
-}
-
-.rain-time {
-    color: #555;
-    margin-top: 7px;
     font-size: 14px;
 }
 </style>
@@ -229,10 +212,8 @@ def metric_card(title, value, desc, icon_class, color, percent):
                 <i class="{icon_class}" style="color:{color};"></i>
             </div>
         </div>
-
         <div class="metric-value">{value}</div>
         <div class="metric-desc">{desc}</div>
-
         <div class="progress-wrap">
             <div class="progress-fill" style="width:{percent}%; background:{color};"></div>
         </div>
@@ -285,10 +266,7 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
     }
 
     try:
-        connected = {
-            "ok": False,
-            "rc": None
-        }
+        connected = {"ok": False, "rc": None}
 
         def on_connect(client, userdata, flags, rc):
             connected["rc"] = rc
@@ -302,23 +280,14 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         )
 
         client.on_connect = on_connect
-
-        client.username_pw_set(
-            cfg["username"],
-            cfg["password"]
-        )
+        client.username_pw_set(cfg["username"], cfg["password"])
 
         client.tls_set(
             cert_reqs=ssl.CERT_REQUIRED,
             tls_version=ssl.PROTOCOL_TLS_CLIENT
         )
 
-        client.connect(
-            cfg["broker"],
-            cfg["port"],
-            keepalive=60
-        )
-
+        client.connect(cfg["broker"], cfg["port"], keepalive=60)
         client.loop_start()
 
         start_time = time.time()
@@ -490,7 +459,6 @@ def main_iot_weather_card(df, latest):
         """
 
     polyline_points = " ".join([f"{x},{y}" for x, y in points])
-
     area_points = (
         f"{left_pad},{height-bottom_pad} "
         + polyline_points
@@ -499,7 +467,6 @@ def main_iot_weather_card(df, latest):
 
     prediction = latest["ai_prediction"]
     icon_class, icon_color = weather_icon(prediction)
-
     rain_status = "Có mưa" if int(latest["rain_sensor"]) == 1 else "Không mưa"
 
     auto_cmd, auto_reason = auto_decide_command(latest)
@@ -520,7 +487,7 @@ def main_iot_weather_card(df, latest):
         box_icon, box_color = weather_icon(row["weather_label"])
 
         if i == len(last_7) - 1:
-            label = "Now"
+            label = "NOW"
         else:
             label = row["time"].strftime("%H:%M")
 
@@ -540,9 +507,12 @@ def main_iot_weather_card(df, latest):
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
 
         <style>
+            * {{
+                font-family: Arial, Helvetica, sans-serif !important;
+            }}
+
             body {{
                 margin: 0;
-                font-family: Arial, Helvetica, sans-serif;
                 color: #2f2f35;
                 background: transparent;
             }}
@@ -562,8 +532,10 @@ def main_iot_weather_card(df, latest):
             }}
 
             .place {{
-                font-size: 19px;
-                font-weight: 800;
+                font-size: 18px;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
             }}
 
             .updated {{
@@ -575,10 +547,12 @@ def main_iot_weather_card(df, latest):
             .action {{
                 background: {action_color};
                 color: white;
-                font-weight: 800;
+                font-weight: 900;
                 border-radius: 999px;
                 padding: 9px 14px;
                 font-size: 13px;
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
             }}
 
             .main {{
@@ -606,25 +580,26 @@ def main_iot_weather_card(df, latest):
             }}
 
             .temp {{
-                font-size: 60px;
-                font-weight: 850;
+                font-size: 58px;
+                font-weight: 900;
                 line-height: 1;
             }}
 
             .condition {{
-                font-size: 23px;
-                font-weight: 850;
+                font-size: 22px;
+                font-weight: 900;
+                text-transform: uppercase;
             }}
 
             .desc {{
                 margin-top: 8px;
-                font-size: 15px;
+                font-size: 14px;
                 color: #555;
             }}
 
             .reason {{
                 margin-top: 7px;
-                font-size: 14px;
+                font-size: 13px;
                 color: #777;
             }}
 
@@ -665,8 +640,8 @@ def main_iot_weather_card(df, latest):
             }}
 
             .day-name {{
-                font-weight: 800;
-                font-size: 14px;
+                font-weight: 900;
+                font-size: 13px;
                 margin-bottom: 7px;
             }}
 
@@ -725,7 +700,7 @@ def main_iot_weather_card(df, latest):
         <div class="card">
             <div class="top">
                 <div>
-                    <div class="place">Trạm IoT phơi đồ thông minh</div>
+                    <div class="place">TRẠM IOT PHƠI ĐỒ THÔNG MINH</div>
                     <div class="updated">Cập nhật: {latest["time"].strftime("%d/%m/%Y %H:%M:%S")}</div>
                 </div>
 
@@ -783,7 +758,7 @@ def main_iot_weather_card(df, latest):
 
 
 # =========================
-# BIG BEAUTIFUL CHART
+# BIG TEMPERATURE CHART
 # =========================
 def render_big_temperature_chart(df):
     chart_df = df.tail(24).copy()
@@ -797,7 +772,6 @@ def render_big_temperature_chart(df):
 
     fig = go.Figure()
 
-    # Đường nền dưới để fill vùng hồng không bị kéo xuống 0°C
     fig.add_trace(
         go.Scatter(
             x=chart_df["time"],
@@ -809,7 +783,6 @@ def render_big_temperature_chart(df):
         )
     )
 
-    # Đường nhiệt độ chính
     fig.add_trace(
         go.Scatter(
             x=chart_df["time"],
@@ -839,7 +812,6 @@ def render_big_temperature_chart(df):
         )
     )
 
-    # Chỉ hiện vài mốc giờ cho thoáng giống mẫu
     tick_df = chart_df.iloc[::3]
 
     fig.update_layout(
@@ -850,7 +822,8 @@ def render_big_temperature_chart(df):
         showlegend=False,
         autosize=True,
         font=dict(
-            size=14,
+            family="Arial, Helvetica, sans-serif",
+            size=13,
             color="#2f3341"
         ),
         xaxis=dict(
@@ -860,22 +833,22 @@ def render_big_temperature_chart(df):
             tickvals=tick_df["time"],
             ticktext=[t.strftime("%H:%M") for t in tick_df["time"]],
             linecolor="rgba(0,0,0,0.08)",
-            tickfont=dict(size=14),
+            tickfont=dict(size=13),
             fixedrange=True
         ),
         yaxis=dict(
-            title="Nhiệt độ °C",
+            title="NHIỆT ĐỘ °C",
             range=[y_bottom, y_top],
             showgrid=True,
             gridcolor="rgba(0,0,0,0.06)",
             zeroline=False,
-            tickfont=dict(size=13),
+            tickfont=dict(size=12),
             fixedrange=True
         )
     )
 
     st.markdown(
-        '<div class="section-title">Biểu đồ nhiệt độ & mưa 24 giờ gần nhất</div>',
+        '<div class="section-title">BIỂU ĐỒ NHIỆT ĐỘ & MƯA 24 GIỜ GẦN NHẤT</div>',
         unsafe_allow_html=True
     )
 
@@ -901,16 +874,17 @@ def render_big_temperature_chart(df):
                     f"""
                     <div style="
                         text-align:center;
-                        font-size:15px;
+                        font-size:14px;
                         color:#0076b6;
                         margin-top:-6px;
                         margin-bottom:10px;
+                        font-family:Arial, Helvetica, sans-serif;
                     ">
                         💧 {rain_text}
                         <div style="
                             color:#555;
                             margin-top:6px;
-                            font-size:14px;
+                            font-size:13px;
                         ">
                             {time_text}
                         </div>
@@ -918,6 +892,8 @@ def render_big_temperature_chart(df):
                     """,
                     unsafe_allow_html=True
                 )
+
+
 # =========================
 # LOAD DATA
 # =========================
@@ -928,7 +904,7 @@ latest = df.iloc[-1]
 # =========================
 # SIDEBAR
 # =========================
-st.sidebar.title("⚙️ Cài đặt hệ thống")
+st.sidebar.title("⚙️ CÀI ĐẶT HỆ THỐNG")
 
 st.sidebar.write("Nguồn dữ liệu:")
 st.sidebar.code(DATA_SOURCE)
@@ -951,7 +927,7 @@ ai_prediction
 # MQTT CONTROL SIDEBAR
 # =========================
 st.sidebar.markdown("---")
-st.sidebar.subheader("📡 Điều khiển MQTT")
+st.sidebar.subheader("📡 ĐIỀU KHIỂN MQTT")
 
 mqtt_cfg = get_mqtt_config()
 
@@ -972,7 +948,7 @@ control_mode = st.sidebar.radio(
     ["Thủ công", "Tự động theo AI"]
 )
 
-st.sidebar.markdown("### Điều khiển thủ công")
+st.sidebar.markdown("### ĐIỀU KHIỂN THỦ CÔNG")
 
 col_open, col_close = st.sidebar.columns(2)
 
@@ -1010,7 +986,7 @@ if "last_auto_command" not in st.session_state:
 if control_mode == "Tự động theo AI":
     auto_cmd, auto_reason = auto_decide_command(latest)
 
-    st.sidebar.markdown("### 🤖 AI đề xuất")
+    st.sidebar.markdown("### AI ĐỀ XUẤT")
     st.sidebar.info(f"Lệnh: {auto_cmd}\n\nLý do: {auto_reason}")
 
     auto_send = st.sidebar.checkbox(
@@ -1037,7 +1013,7 @@ if control_mode == "Tự động theo AI":
 # HEADER
 # =========================
 st.markdown(
-    '<div class="main-title">IoT Weather Dashboard - Hệ thống phơi đồ thông minh</div>',
+    '<div class="main-title">IOT WEATHER DASHBOARD - HỆ THỐNG PHƠI ĐỒ THÔNG MINH</div>',
     unsafe_allow_html=True
 )
 
@@ -1153,12 +1129,12 @@ with right:
         100
     )
 
-    st.markdown('<div class="section-title">Điều khiển thủ công</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">ĐIỀU KHIỂN THỦ CÔNG</div>', unsafe_allow_html=True)
 
     st.markdown(
         f"""
         <div class="control-note">
-            Servo: <b>{SERVO_NAME}</b><br>
+            SERVO: <b>{SERVO_NAME}</b><br>
             OPEN → {SERVO_OPEN_ANGLE}° &nbsp;&nbsp; | &nbsp;&nbsp;
             CLOSE → {SERVO_CLOSE_ANGLE}°
         </div>
@@ -1194,13 +1170,8 @@ with right:
 
 
 # =========================
-# BIG CHART OUTSIDE COLUMNS
+# BIG CHART
 # =========================
-st.markdown(
-    '<div class="section-title">Biểu đồ nhiệt độ & mưa 24 giờ gần nhất</div>',
-    unsafe_allow_html=True
-)
-
 render_big_temperature_chart(df)
 
 
