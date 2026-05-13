@@ -789,8 +789,27 @@ def render_big_temperature_chart(df):
     chart_df = df.tail(24).copy()
     chart_df["time"] = pd.to_datetime(chart_df["time"])
 
+    min_temp = chart_df["temperature"].min()
+    max_temp = chart_df["temperature"].max()
+
+    y_bottom = min_temp - 1.5
+    y_top = max_temp + 1.8
+
     fig = go.Figure()
 
+    # Đường nền dưới để fill vùng hồng không bị kéo xuống 0°C
+    fig.add_trace(
+        go.Scatter(
+            x=chart_df["time"],
+            y=[y_bottom] * len(chart_df),
+            mode="lines",
+            line=dict(width=0),
+            showlegend=False,
+            hoverinfo="skip"
+        )
+    )
+
+    # Đường nhiệt độ chính
     fig.add_trace(
         go.Scatter(
             x=chart_df["time"],
@@ -802,29 +821,34 @@ def render_big_temperature_chart(df):
                 width=4,
                 color="rgba(255, 150, 150, 0.95)",
                 shape="spline",
-                smoothing=1.2
+                smoothing=1.15
             ),
             marker=dict(
                 size=8,
                 color="rgba(255, 130, 130, 1)",
                 line=dict(width=2, color="white")
             ),
-            fill="tozeroy",
-            fillcolor="rgba(255, 160, 160, 0.22)",
+            fill="tonexty",
+            fillcolor="rgba(255, 150, 150, 0.22)",
+            showlegend=False,
             hovertemplate=(
                 "<b>%{x|%H:%M}</b><br>"
-                "Nhiệt độ: %{y:.1f}°C<br>"
+                "Nhiệt độ: %{y:.1f}°C"
                 "<extra></extra>"
             )
         )
     )
 
+    # Chỉ hiện vài mốc giờ cho thoáng giống mẫu
+    tick_df = chart_df.iloc[::3]
+
     fig.update_layout(
-        height=520,
-        margin=dict(l=20, r=20, t=35, b=20),
+        height=360,
+        margin=dict(l=10, r=10, t=35, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#f8f6f3",
         showlegend=False,
+        autosize=True,
         font=dict(
             size=14,
             color="#2f3341"
@@ -832,68 +856,68 @@ def render_big_temperature_chart(df):
         xaxis=dict(
             title="",
             showgrid=False,
-            tickformat="%H:%M",
-            tickangle=0,
+            tickmode="array",
+            tickvals=tick_df["time"],
+            ticktext=[t.strftime("%H:%M") for t in tick_df["time"]],
             linecolor="rgba(0,0,0,0.08)",
-            tickfont=dict(size=14)
+            tickfont=dict(size=14),
+            fixedrange=True
         ),
         yaxis=dict(
             title="Nhiệt độ °C",
+            range=[y_bottom, y_top],
             showgrid=True,
             gridcolor="rgba(0,0,0,0.06)",
             zeroline=False,
-            tickfont=dict(size=14)
+            tickfont=dict(size=13),
+            fixedrange=True
         )
     )
 
     st.markdown(
-        """
-        <div style="
-            background:#f3eee8;
-            border-radius:28px;
-            padding:22px 24px 12px 24px;
-            box-shadow:0 8px 24px rgba(0,0,0,0.055);
-            margin-top:24px;
-            margin-bottom:10px;
-        ">
-        """,
+        '<div class="section-title">Biểu đồ nhiệt độ & mưa 24 giờ gần nhất</div>',
         unsafe_allow_html=True
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    with st.container(border=True):
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config={
+                "displayModeBar": False,
+                "responsive": True
+            }
+        )
 
-    rain_data = chart_df.tail(8).reset_index(drop=True)
-    rain_cols = st.columns(8)
+        rain_data = chart_df.tail(8).reset_index(drop=True)
+        rain_cols = st.columns(8)
 
-    for i, row in rain_data.iterrows():
-        rain_text = "Có mưa" if int(row["rain_sensor"]) == 1 else "0%"
-        time_text = row["time"].strftime("%H:%M")
+        for i, row in rain_data.iterrows():
+            rain_text = "Có mưa" if int(row["rain_sensor"]) == 1 else "0%"
+            time_text = row["time"].strftime("%H:%M")
 
-        with rain_cols[i]:
-            st.markdown(
-                f"""
-                <div style="
-                    text-align:center;
-                    font-size:15px;
-                    color:#0076b6;
-                    margin-top:-8px;
-                    margin-bottom:10px;
-                ">
-                    💧 {rain_text}
+            with rain_cols[i]:
+                st.markdown(
+                    f"""
                     <div style="
-                        color:#555;
-                        margin-top:7px;
-                        font-size:14px;
+                        text-align:center;
+                        font-size:15px;
+                        color:#0076b6;
+                        margin-top:-6px;
+                        margin-bottom:10px;
                     ">
-                        {time_text}
+                        💧 {rain_text}
+                        <div style="
+                            color:#555;
+                            margin-top:6px;
+                            font-size:14px;
+                        ">
+                            {time_text}
+                        </div>
                     </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
+                    """,
+                    unsafe_allow_html=True
+                )
 # =========================
 # LOAD DATA
 # =========================
