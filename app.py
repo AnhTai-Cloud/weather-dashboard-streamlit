@@ -30,16 +30,24 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - FIX CỨNG HIVEMQ CLOUD
 # =========================
-MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491a1df.s1.eu.hivemq.cloud"
+MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491adf.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883
 
 MQTT_USERNAME = "anhtai"
-MQTT_PASSWORD = "31102005Tai@"
+MQTT_PASSWORD = "NHAP_MAT_KHAU_HIVEMQ_CUA_BAN"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 MQTT_TOPIC_DATA = "iot/clothesline/data"
 MQTT_TOPIC_CMD = "iot/clothesline/cmd"
 MQTT_DEVICE_ID = "esp32_clothesline_01"
+
+
+# =========================
+# SERVO CONFIG - MG90S
+# =========================
+SERVO_NAME = "MG90S"
+SERVO_OPEN_ANGLE = 90
+SERVO_CLOSE_ANGLE = 0
 
 
 # =========================
@@ -146,6 +154,15 @@ section[data-testid="stSidebar"] {
     font-weight: 850;
     margin: 22px 0 12px 0;
 }
+
+.control-note {
+    background: #f3eee8;
+    border-radius: 18px;
+    padding: 14px 16px;
+    color: #2f3341;
+    margin-bottom: 12px;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.04);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -216,9 +233,27 @@ def get_mqtt_config():
 def mqtt_publish(command, reason="Manual control from dashboard"):
     cfg = get_mqtt_config()
 
+    command = command.upper().strip()
+
+    if command == "OPEN":
+        target_angle = SERVO_OPEN_ANGLE
+        action_text = "Mở dàn phơi"
+    elif command == "CLOSE":
+        target_angle = SERVO_CLOSE_ANGLE
+        action_text = "Đóng / thu dàn phơi"
+    else:
+        return False, {
+            "error": "Invalid command",
+            "command": command,
+            "allowed_commands": ["OPEN", "CLOSE"]
+        }
+
     payload = {
         "device": cfg["device_id"],
         "command": command,
+        "angle": target_angle,
+        "servo": SERVO_NAME,
+        "action": action_text,
         "source": "streamlit",
         "reason": reason,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
@@ -258,7 +293,6 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
             cfg["password"]
         )
 
-        # HiveMQ Cloud dùng TLS port 8883
         client.tls_set(
             cert_reqs=ssl.CERT_REQUIRED,
             tls_version=ssl.PROTOCOL_TLS_CLIENT
@@ -336,7 +370,7 @@ def auto_decide_command(latest):
     if prediction == "Nắng" and rain_sensor == 0:
         return "OPEN", "Trời nắng, không phát hiện mưa"
 
-    return "STOP", "Điều kiện chưa rõ, giữ trạng thái hiện tại"
+    return "CLOSE", "Điều kiện chưa rõ, đưa dàn phơi về trạng thái an toàn"
 
 
 # =========================
@@ -472,7 +506,7 @@ def main_iot_weather_card(df, latest):
     auto_cmd, auto_reason = auto_decide_command(latest)
 
     if auto_cmd == "CLOSE":
-        action = "CẤT ĐỒ"
+        action = "ĐÓNG DÀN PHƠI"
         action_color = "#e74c3c"
     elif auto_cmd == "OPEN":
         action = "MỞ DÀN PHƠI"
@@ -795,6 +829,9 @@ st.sidebar.code(str(mqtt_cfg["port"]))
 st.sidebar.write("Topic CMD:")
 st.sidebar.code(mqtt_cfg["topic_cmd"])
 
+st.sidebar.write("Servo:")
+st.sidebar.code(f"{SERVO_NAME} | OPEN={SERVO_OPEN_ANGLE}° | CLOSE={SERVO_CLOSE_ANGLE}°")
+
 control_mode = st.sidebar.radio(
     "Chế độ điều khiển",
     ["Thủ công", "Tự động theo AI"]
@@ -805,36 +842,32 @@ st.sidebar.markdown("### Điều khiển thủ công")
 col_open, col_close = st.sidebar.columns(2)
 
 with col_open:
-    if st.button("MỞ", use_container_width=True):
-        ok, result = mqtt_publish("OPEN", "Người dùng bấm mở dàn phơi")
+    if st.button("MỞ 90°", use_container_width=True):
+        ok, result = mqtt_publish(
+            "OPEN",
+            "Người dùng bấm mở dàn phơi 90 độ"
+        )
 
         if ok:
-            st.sidebar.success("Đã gửi lệnh OPEN")
+            st.sidebar.success("Đã gửi OPEN 90°")
         else:
             st.sidebar.error("Không gửi được MQTT")
 
         st.sidebar.json(result)
 
 with col_close:
-    if st.button("CẤT", use_container_width=True):
-        ok, result = mqtt_publish("CLOSE", "Người dùng bấm cất dàn phơi")
+    if st.button("ĐÓNG 0°", use_container_width=True):
+        ok, result = mqtt_publish(
+            "CLOSE",
+            "Người dùng bấm đóng dàn phơi về 0 độ"
+        )
 
         if ok:
-            st.sidebar.success("Đã gửi lệnh CLOSE")
+            st.sidebar.success("Đã gửi CLOSE 0°")
         else:
             st.sidebar.error("Không gửi được MQTT")
 
         st.sidebar.json(result)
-
-if st.sidebar.button("DỪNG SERVO", use_container_width=True):
-    ok, result = mqtt_publish("STOP", "Người dùng bấm dừng servo")
-
-    if ok:
-        st.sidebar.success("Đã gửi lệnh STOP")
-    else:
-        st.sidebar.error("Không gửi được MQTT")
-
-    st.sidebar.json(result)
 
 
 # =========================
@@ -970,12 +1003,12 @@ with right:
     if auto_cmd == "CLOSE":
         control_color = "#e74c3c"
         control_icon = "wi wi-rain"
-        control_text = "CẤT ĐỒ"
+        control_text = f"ĐÓNG {SERVO_CLOSE_ANGLE}°"
 
     elif auto_cmd == "OPEN":
         control_color = "#43b36a"
         control_icon = "wi wi-day-sunny"
-        control_text = "MỞ DÀN PHƠI"
+        control_text = f"MỞ {SERVO_OPEN_ANGLE}°"
 
     else:
         control_color = "#f5a623"
@@ -983,7 +1016,7 @@ with right:
         control_text = "GIỮ NGUYÊN"
 
     metric_card(
-        "Điều khiển servo",
+        "Điều khiển MG90S",
         control_text,
         auto_reason,
         control_icon,
@@ -993,36 +1026,42 @@ with right:
 
     st.markdown('<div class="section-title">Điều khiển thủ công</div>', unsafe_allow_html=True)
 
-    btn1, btn2, btn3 = st.columns(3)
+    st.markdown(
+        f"""
+        <div class="control-note">
+            Servo: <b>{SERVO_NAME}</b><br>
+            OPEN → {SERVO_OPEN_ANGLE}° &nbsp;&nbsp; | &nbsp;&nbsp;
+            CLOSE → {SERVO_CLOSE_ANGLE}°
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    btn1, btn2 = st.columns(2)
 
     with btn1:
-        if st.button("MỞ", use_container_width=True, key="main_open"):
-            ok, result = mqtt_publish("OPEN", "Người dùng bấm mở dàn phơi trên dashboard")
+        if st.button("MỞ DÀN PHƠI 90°", use_container_width=True, key="main_open"):
+            ok, result = mqtt_publish(
+                "OPEN",
+                "Người dùng bấm mở dàn phơi 90 độ trên dashboard"
+            )
 
             if ok:
-                st.success("Đã gửi lệnh OPEN")
+                st.success("Đã gửi OPEN - angle 90°")
             else:
                 st.error("Không gửi được MQTT")
 
             st.json(result)
 
     with btn2:
-        if st.button("CẤT", use_container_width=True, key="main_close"):
-            ok, result = mqtt_publish("CLOSE", "Người dùng bấm cất dàn phơi trên dashboard")
+        if st.button("ĐÓNG DÀN PHƠI 0°", use_container_width=True, key="main_close"):
+            ok, result = mqtt_publish(
+                "CLOSE",
+                "Người dùng bấm đóng dàn phơi về 0 độ trên dashboard"
+            )
 
             if ok:
-                st.success("Đã gửi lệnh CLOSE")
-            else:
-                st.error("Không gửi được MQTT")
-
-            st.json(result)
-
-    with btn3:
-        if st.button("DỪNG", use_container_width=True, key="main_stop"):
-            ok, result = mqtt_publish("STOP", "Người dùng bấm dừng servo trên dashboard")
-
-            if ok:
-                st.success("Đã gửi lệnh STOP")
+                st.success("Đã gửi CLOSE - angle 0°")
             else:
                 st.error("Không gửi được MQTT")
 
