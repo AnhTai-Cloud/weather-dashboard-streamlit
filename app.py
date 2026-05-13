@@ -17,22 +17,28 @@ st.set_page_config(
 
 
 # =========================
+# RENDER AI API CONFIG
+# =========================
+AI_API_BASE = "https://weather-model-api.onrender.com"
+
+
+# =========================
 # MQTT WEBSOCKET CONFIG
 # =========================
-# Chỉ nhập HOST, không nhập wss:// và không nhập :8884
 MQTT_BROKER_HOST = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
 
 MQTT_WS_PORT = 8884
 MQTT_WS_PATH = "/mqtt"
 
 MQTT_USERNAME = "ESP32-client"
+
+# Đổi lại mật khẩu MQTT của bạn ở đây
 MQTT_PASSWORD = "Tan01052005!"
 
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
 MQTT_TOPIC_CONTROL_RACK = "smart_home/control/rack"
 MQTT_TOPIC_CONTROL_DOOR = "smart_home/control/door"
 MQTT_TOPIC_CONTROL_MODE = "smart_home/control/mode"
-
 
 MQTT_WS_URL = f"wss://{MQTT_BROKER_HOST}:{MQTT_WS_PORT}{MQTT_WS_PATH}"
 
@@ -484,9 +490,9 @@ html_template = Template(r"""
     <pre class="raw-box" id="rawPayload">Chưa có payload...</pre>
 
     <div class="small-note">
-        Nếu dashboard không nhận dữ liệu, kiểm tra ESP đã publish retained lên
-        <b>smart_home/sensor/data</b> chưa. Nếu nút điều khiển không chạy, kiểm tra ESP đã subscribe
-        <b>smart_home/control/rack</b>, <b>smart_home/control/door</b>, <b>smart_home/control/mode</b> chưa.
+        Dashboard nhận dữ liệu từ MQTT topic <b>smart_home/sensor/data</b>,
+        sau đó tự gửi sang Render API để lưu lịch sử và dự đoán AI.
+        Nếu tắt dashboard thì dữ liệu MQTT sẽ không được chuyển sang API.
     </div>
 
 </div>
@@ -501,9 +507,14 @@ const TOPIC_RACK = $TOPIC_RACK;
 const TOPIC_DOOR = $TOPIC_DOOR;
 const TOPIC_MODE = $TOPIC_MODE;
 
+const AI_API_BASE = $AI_API_BASE;
+
 let mqttClient = null;
 let latestData = null;
 let lastAiCommand = "CLOSE";
+let lastPredictTime = 0;
+
+const PREDICT_INTERVAL_MS = 30 * 60 * 1000;
 
 const tempLabels = [];
 const tempValues = [];
@@ -537,21 +548,6 @@ function setProgress(id, percent, color) {
     }
 }
 
-function weatherLabel(data) {
-    const rainState = String(data.rain_state || "NO_RAIN").toUpperCase();
-    const light = Number(data.light_lux || data.light || 0);
-
-    if (rainState === "RAIN" || rainState === "RAINING") {
-        return "Mưa";
-    }
-
-    if (light < 300) {
-        return "Âm u";
-    }
-
-    return "Nắng";
-}
-
 function updateAiIcon(label) {
     const icon = el("aiIcon");
 
@@ -568,46 +564,6 @@ function updateAiIcon(label) {
         icon.style.color = "#f5a623";
         setProgress("aiBar", 90, "#f5a623");
     }
-}
-
-function decideAi(data) {
-    const rainState = String(data.rain_state || "NO_RAIN").toUpperCase();
-    const humidity = Number(data.humidity || 0);
-    const light = Number(data.light_lux || data.light || 0);
-    const label = weatherLabel(data);
-
-    if (rainState === "RAIN" || rainState === "RAINING") {
-        return {
-            command: "CLOSE",
-            reason: "Cảm biến mưa phát hiện có mưa"
-        };
-    }
-
-    if (label === "Mưa") {
-        return {
-            command: "CLOSE",
-            reason: "AI dự đoán trời mưa"
-        };
-    }
-
-    if (label === "Âm u" && humidity >= 88 && light < 250) {
-        return {
-            command: "CLOSE",
-            reason: "Trời âm u, độ ẩm cao, ánh sáng thấp"
-        };
-    }
-
-    if (label === "Nắng" && rainState !== "RAIN") {
-        return {
-            command: "OPEN",
-            reason: "Trời nắng, không phát hiện mưa"
-        };
-    }
-
-    return {
-        command: "CLOSE",
-        reason: "Điều kiện chưa rõ, đưa dàn phơi về trạng thái an toàn"
-    };
 }
 
 function updateRackState(state) {
@@ -650,7 +606,7 @@ function updateRain(data) {
 
     el("rainRaw").innerText = "Raw: " + rainRaw + " | " + rainState;
 
-    if (rainState === "RAIN" || rainState === "RAINING") {
+    if (rainState === "RAIN" || rainState === "RAINING" || Number(data.rain || 0) === 1) {
         el("rainState").innerText = "Có mưa";
         el("rainIcon").style.color = "#e74c3c";
         setProgress("rainBar", 100, "#e74c3c");
@@ -712,14 +668,6 @@ function updateCards(data) {
     updateRackState(data.rack_state || "CLOSE");
     updateDoorState(data.door_state || "CLOSE");
     updateMode(data);
-
-    const label = weatherLabel(data);
-    el("aiPrediction").innerText = label;
-    updateAiIcon(label);
-
-    const ai = decideAi(data);
-    lastAiCommand = ai.command;
-    el("aiDecision").innerText = "AI đề xuất: " + ai.command + " | " + ai.reason;
 
     el("lastUpdate").innerText = nowText();
     el("rawPayload").innerText = JSON.stringify(data, null, 2);
@@ -797,7 +745,10 @@ function publish(topic, message, successText) {
         retain: false
     });
 
-    el("lastCommand").innerText = "Lệnh gần nhất: " + successText + " | Topic: " + topic + " | Message: " + message;
+    el("lastCommand").innerText =
+        "Lệnh gần nhất: " + successText +
+        " | Topic: " + topic +
+        " | Message: " + message;
 }
 
 function setButtonsDisabled(disabled) {
@@ -814,6 +765,112 @@ function setButtonsDisabled(disabled) {
     ids.forEach(function(id) {
         el(id).disabled = disabled;
     });
+}
+
+function normalizeForApi(data) {
+    const rainState = String(data.rain_state || "NO_RAIN").toUpperCase();
+
+    let rainValue = 0;
+
+    if (rainState === "RAIN" || rainState === "RAINING") {
+        rainValue = 1;
+    } else if (data.rain !== undefined) {
+        rainValue = Number(data.rain);
+    }
+
+    return {
+        time: data.time || new Date().toISOString(),
+
+        temperature: Number(data.temperature || 0),
+        humidity: Number(data.humidity || 0),
+        pressure: Number(data.pressure_hpa || data.pressure || 0),
+        light: Number(data.light_lux || data.light || 0),
+        rain: rainValue,
+
+        gas: Number(data.gas_raw || data.gas || 0),
+        rain_raw: data.rain_raw ?? null,
+        rain_state: data.rain_state || null,
+        gas_alarm: Boolean(data.gas_alarm),
+        rack_state: data.rack_state || null,
+        door_state: data.door_state || null,
+        mode: data.mode || null,
+        period: data.period || null
+    };
+}
+
+async function sendIngestToApi(data) {
+    const payload = normalizeForApi(data);
+
+    try {
+        const res = await fetch(AI_API_BASE + "/ingest", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const json = await res.json();
+        console.log("Ingest API:", json);
+
+        return json;
+    } catch (err) {
+        console.error("Ingest API error:", err);
+        el("aiDecision").innerText = "Lỗi gửi dữ liệu lên AI API: " + err.message;
+        return null;
+    }
+}
+
+async function callPredictApi(force = false) {
+    const now = Date.now();
+
+    if (!force && now - lastPredictTime < PREDICT_INTERVAL_MS) {
+        return;
+    }
+
+    lastPredictTime = now;
+
+    try {
+        const res = await fetch(AI_API_BASE + "/predict", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                history: []
+            })
+        });
+
+        const json = await res.json();
+        console.log("Predict API:", json);
+
+        if (!json.ok) {
+            el("aiPrediction").innerText = "Chưa đủ dữ liệu";
+            el("aiDecision").innerText = json.error || "AI chưa dự đoán được";
+            return;
+        }
+
+        el("aiPrediction").innerText = json.prediction;
+        updateAiIcon(json.prediction);
+
+        lastAiCommand = json.command;
+
+        const rainPercent = Number(json.rain_probability || 0) * 100;
+        const meteoText =
+            json.source_info && json.source_info.used_meteo
+                ? "Có bù Meteo"
+                : "Không bù Meteo";
+
+        el("aiDecision").innerText =
+            "AI thật: " + json.prediction +
+            " | Lệnh: " + json.command +
+            " | Xác suất mưa: " + rainPercent.toFixed(1) + "%" +
+            " | " + meteoText;
+
+    } catch (err) {
+        console.error("Predict API error:", err);
+        el("aiDecision").innerText = "Lỗi gọi AI API: " + err.message;
+    }
 }
 
 function setupButtons() {
@@ -847,8 +904,10 @@ function setupButtons() {
         el("mode").innerText = "AUTO";
     });
 
-    el("btnAiSend").addEventListener("click", function() {
+    el("btnAiSend").addEventListener("click", async function() {
         publish(TOPIC_MODE, "AUTO", "CHUYỂN AUTO THEO AI");
+
+        await callPredictApi(true);
 
         if (lastAiCommand === "OPEN") {
             publish(TOPIC_RACK, "OPEN", "AI GỬI OPEN");
@@ -879,9 +938,11 @@ function connectMqtt() {
     mqttClient.on("connect", function() {
         setBadge("ĐÃ KẾT NỐI MQTT WEBSOCKET", "badge-ok");
         el("mqttDetail").innerText = "Đã subscribe: " + TOPIC_SENSOR;
+
         mqttClient.subscribe(TOPIC_SENSOR, {
             qos: 0
         });
+
         setButtonsDisabled(false);
     });
 
@@ -901,14 +962,21 @@ function connectMqtt() {
         console.error(err);
     });
 
-    mqttClient.on("message", function(topic, message) {
+    mqttClient.on("message", async function(topic, message) {
         try {
             const text = message.toString();
             const data = JSON.parse(text);
+
             updateCards(data);
+
+            await sendIngestToApi(data);
+
+            await callPredictApi(false);
+
         } catch (e) {
             console.error("Payload parse error:", e);
-            el("rawPayload").innerText = "Payload parse error: " + e.message + "\\n" + message.toString();
+            el("rawPayload").innerText =
+                "Payload parse error: " + e.message + "\\n" + message.toString();
         }
     });
 }
@@ -930,6 +998,7 @@ html_code = html_template.substitute(
     TOPIC_RACK=json.dumps(MQTT_TOPIC_CONTROL_RACK),
     TOPIC_DOOR=json.dumps(MQTT_TOPIC_CONTROL_DOOR),
     TOPIC_MODE=json.dumps(MQTT_TOPIC_CONTROL_MODE),
+    AI_API_BASE=json.dumps(AI_API_BASE),
 )
 
 html(html_code, height=1200, scrolling=True)
