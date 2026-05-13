@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-from streamlit.components.v1 import html as components_html
-from datetime import datetime, timedelta
 import json
 import time
 import paho.mqtt.client as mqtt
+from datetime import datetime, timedelta
+from streamlit.components.v1 import html as components_html
 
 
 # =========================
@@ -21,16 +21,16 @@ st.set_page_config(
 
 
 # =========================
-# CONFIG
+# DATA SOURCE
 # =========================
 DATA_SOURCE = "data.csv"
 
-# Nếu sau này dùng Google Sheet, đổi thành link CSV:
-# DATA_SOURCE = "https://docs.google.com/spreadsheets/d/xxxxx/export?format=csv"
+# Nếu dùng Google Sheet CSV thì thay thành:
+# DATA_SOURCE = "https://docs.google.com/spreadsheets/d/xxxx/export?format=csv"
 
 
 # =========================
-# CSS STREAMLIT
+# CSS
 # =========================
 st.markdown(
     """
@@ -138,7 +138,7 @@ section[data-testid="stSidebar"] {
 
 
 # =========================
-# HELPER
+# HELPER FUNCTIONS
 # =========================
 def clamp(x, min_val=0, max_val=100):
     return max(min_val, min(float(x), max_val))
@@ -183,10 +183,104 @@ def metric_card(title, value, desc, icon_class, color, percent):
     st.markdown(" ".join(html.split()), unsafe_allow_html=True)
 
 
+# =========================
+# MQTT FUNCTIONS
+# =========================
+def get_mqtt_config():
+    try:
+        return {
+            "broker": st.secrets["mqtt"]["broker"],
+            "port": int(st.secrets["mqtt"]["port"]),
+            "username": st.secrets["mqtt"].get("username", ""),
+            "password": st.secrets["mqtt"].get("password", ""),
+            "client_id": st.secrets["mqtt"].get("client_id", "streamlit_dashboard"),
+            "topic_data": st.secrets["mqtt"].get("topic_data", "iot/clothesline/data"),
+            "topic_cmd": st.secrets["mqtt"].get("topic_cmd", "iot/clothesline/cmd"),
+            "device_id": st.secrets["mqtt"].get("device_id", "esp32_clothesline_01"),
+        }
+    except Exception:
+        return {
+            "broker": "broker.emqx.io",
+            "port": 1883,
+            "username": "",
+            "password": "",
+            "client_id": "streamlit_dashboard",
+            "topic_data": "iot/clothesline/data",
+            "topic_cmd": "iot/clothesline/cmd",
+            "device_id": "esp32_clothesline_01",
+        }
+
+
+def mqtt_publish(command, reason="Manual control from dashboard"):
+    cfg = get_mqtt_config()
+
+    payload = {
+        "device": cfg["device_id"],
+        "command": command,
+        "source": "streamlit",
+        "reason": reason,
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+
+    client = mqtt.Client(
+        client_id=cfg["client_id"] + "_pub",
+        protocol=mqtt.MQTTv311
+    )
+
+    if cfg["username"] != "":
+        client.username_pw_set(cfg["username"], cfg["password"])
+
+    try:
+        client.connect(cfg["broker"], cfg["port"], 60)
+        client.loop_start()
+
+        result = client.publish(
+            cfg["topic_cmd"],
+            json.dumps(payload, ensure_ascii=False),
+            qos=1,
+            retain=False
+        )
+
+        result.wait_for_publish(timeout=5)
+
+        client.loop_stop()
+        client.disconnect()
+
+        return True, payload
+
+    except Exception as e:
+        return False, str(e)
+
+
+def auto_decide_command(latest):
+    rain_sensor = int(latest["rain_sensor"])
+    prediction = str(latest["ai_prediction"])
+    humidity = float(latest["humidity"])
+    light = float(latest["light"])
+
+    if rain_sensor == 1:
+        return "CLOSE", "Cảm biến mưa phát hiện có mưa"
+
+    if prediction == "Mưa":
+        return "CLOSE", "AI dự đoán trời mưa"
+
+    if prediction == "Âm u" and humidity >= 88 and light < 250:
+        return "CLOSE", "Trời âm u, độ ẩm cao, ánh sáng thấp"
+
+    if prediction == "Nắng" and rain_sensor == 0:
+        return "OPEN", "Trời nắng, không phát hiện mưa"
+
+    return "STOP", "Điều kiện chưa rõ, giữ trạng thái hiện tại"
+
+
+# =========================
+# DEMO DATA
+# =========================
 def make_demo_data():
     now = datetime.now().replace(minute=0, second=0, microsecond=0)
 
     rows = []
+
     for i in range(36):
         t = now - timedelta(hours=35 - i)
 
@@ -247,104 +341,15 @@ def load_data():
                 df[col] = 0
 
     return df
-    # =========================
-# MQTT CONFIG
-# =========================
-def get_mqtt_config():
-    try:
-        return {
-            "broker": st.secrets["mqtt"]["broker"],
-            "port": int(st.secrets["mqtt"]["port"]),
-            "username": st.secrets["mqtt"].get("username", ""),
-            "password": st.secrets["mqtt"].get("password", ""),
-            "client_id": st.secrets["mqtt"].get("client_id", "streamlit_dashboard"),
-            "topic_data": st.secrets["mqtt"].get("topic_data", "iot/clothesline/data"),
-            "topic_cmd": st.secrets["mqtt"].get("topic_cmd", "iot/clothesline/cmd"),
-            "device_id": st.secrets["mqtt"].get("device_id", "esp32_clothesline_01"),
-        }
-    except Exception:
-        return {
-            "broker": "broker.emqx.io",
-            "port": 1883,
-            "username": "",
-            "password": "",
-            "client_id": "streamlit_dashboard",
-            "topic_data": "iot/clothesline/data",
-            "topic_cmd": "iot/clothesline/cmd",
-            "device_id": "esp32_clothesline_01",
-        }
-
-
-def mqtt_publish(command, reason="Manual control from dashboard"):
-    cfg = get_mqtt_config()
-
-    payload = {
-        "device": cfg["device_id"],
-        "command": command,
-        "source": "streamlit",
-        "reason": reason,
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-    client = mqtt.Client(
-        client_id=cfg["client_id"] + "_pub",
-        protocol=mqtt.MQTTv311
-    )
-
-    if cfg["username"] != "":
-        client.username_pw_set(cfg["username"], cfg["password"])
-
-    try:
-        client.connect(cfg["broker"], cfg["port"], 60)
-        client.loop_start()
-
-        result = client.publish(
-            cfg["topic_cmd"],
-            json.dumps(payload),
-            qos=1,
-            retain=False
-        )
-
-        result.wait_for_publish(timeout=5)
-
-        client.loop_stop()
-        client.disconnect()
-
-        return True, payload
-
-    except Exception as e:
-        return False, str(e)
-
-
-def auto_decide_command(latest):
-    rain_sensor = int(latest["rain_sensor"])
-    prediction = str(latest["ai_prediction"])
-    humidity = float(latest["humidity"])
-    light = float(latest["light"])
-
-    if rain_sensor == 1:
-        return "CLOSE", "Cảm biến mưa phát hiện có mưa"
-
-    if prediction == "Mưa":
-        return "CLOSE", "AI dự đoán trời mưa"
-
-    if prediction == "Âm u" and humidity >= 88 and light < 250:
-        return "CLOSE", "Trời âm u, độ ẩm cao, ánh sáng thấp"
-
-    if prediction == "Nắng" and rain_sensor == 0:
-        return "OPEN", "Trời nắng, không phát hiện mưa"
-
-    return "STOP", "Điều kiện chưa rõ, giữ trạng thái hiện tại"
 
 
 # =========================
-# BING STYLE MAIN CARD
+# MAIN CARD
 # =========================
 def main_iot_weather_card(df, latest):
     last_7 = df.tail(7).copy().reset_index(drop=True)
 
     temps = last_7["temperature"].astype(float).tolist()
-    hums = last_7["humidity"].astype(float).tolist()
     rains = last_7["rain_sensor"].astype(float).tolist()
     times = [t.strftime("%I %p").lstrip("0") for t in last_7["time"]]
 
@@ -398,17 +403,20 @@ def main_iot_weather_card(df, latest):
 
     rain_status = "Có mưa" if int(latest["rain_sensor"]) == 1 else "Không mưa"
 
-    if prediction == "Mưa" or int(latest["rain_sensor"]) == 1:
+    auto_cmd, auto_reason = auto_decide_command(latest)
+
+    if auto_cmd == "CLOSE":
         action = "CẤT ĐỒ"
         action_color = "#e74c3c"
-    elif prediction == "Âm u":
-        action = "THEO DÕI THÊM"
-        action_color = "#f5a623"
-    else:
-        action = "TIẾP TỤC PHƠI"
+    elif auto_cmd == "OPEN":
+        action = "MỞ DÀN PHƠI"
         action_color = "#43b36a"
+    else:
+        action = "GIỮ NGUYÊN"
+        action_color = "#f5a623"
 
     daily_boxes = ""
+
     for i, row in last_7.iterrows():
         box_icon, box_color = weather_icon(row["weather_label"])
 
@@ -513,6 +521,12 @@ def main_iot_weather_card(df, latest):
                 margin-top: 8px;
                 font-size: 15px;
                 color: #555;
+            }}
+
+            .reason {{
+                margin-top: 7px;
+                font-size: 14px;
+                color: #777;
             }}
 
             .pill-row {{
@@ -634,6 +648,10 @@ def main_iot_weather_card(df, latest):
                         Độ ẩm {latest["humidity"]:.0f}% · Áp suất {latest["pressure"]:.1f} hPa · Ánh sáng {latest["light"]:.0f} lux · {rain_status}
                     </div>
 
+                    <div class="reason">
+                        Quyết định: {auto_reason}
+                    </div>
+
                     <div class="pill-row">
                         <div class="pill"><i class="wi wi-humidity"></i>{latest["humidity"]:.0f}% độ ẩm</div>
                         <div class="pill"><i class="wi wi-barometer"></i>{latest["pressure"]:.1f} hPa</div>
@@ -662,7 +680,7 @@ def main_iot_weather_card(df, latest):
     </html>
     """
 
-    components_html(html, height=600)
+    components_html(html, height=610)
 
 
 # =========================
@@ -700,6 +718,8 @@ rain_sensor
 weather_label
 ai_prediction
 """)
+
+
 # =========================
 # MQTT CONTROL SIDEBAR
 # =========================
@@ -745,6 +765,8 @@ if st.sidebar.button("DỪNG SERVO", use_container_width=True):
         st.sidebar.success("Đã gửi lệnh STOP")
     else:
         st.sidebar.error(f"Lỗi MQTT: {result}")
+
+
 # =========================
 # AUTO CONTROL THEO AI
 # =========================
@@ -775,6 +797,7 @@ if control_mode == "Tự động theo AI":
                 st.sidebar.error(f"Lỗi MQTT: {result}")
         else:
             st.sidebar.caption("Lệnh này đã được gửi, không gửi lặp lại.")
+
 
 # =========================
 # HEADER
@@ -869,34 +892,35 @@ with right:
             color,
             80
         )
-# =========================
-# HIỂN THỊ TRẠNG THÁI ĐIỀU KHIỂN SERVO
-# =========================
-auto_cmd, auto_reason = auto_decide_command(latest)
 
-if auto_cmd == "CLOSE":
-    control_color = "#e74c3c"
-    control_icon = "wi wi-rain"
-    control_text = "CẤT ĐỒ"
+    # =========================
+    # HIỂN THỊ TRẠNG THÁI ĐIỀU KHIỂN SERVO
+    # =========================
+    auto_cmd, auto_reason = auto_decide_command(latest)
 
-elif auto_cmd == "OPEN":
-    control_color = "#43b36a"
-    control_icon = "wi wi-day-sunny"
-    control_text = "MỞ DÀN PHƠI"
+    if auto_cmd == "CLOSE":
+        control_color = "#e74c3c"
+        control_icon = "wi wi-rain"
+        control_text = "CẤT ĐỒ"
 
-else:
-    control_color = "#f5a623"
-    control_icon = "wi wi-na"
-    control_text = "GIỮ NGUYÊN"
+    elif auto_cmd == "OPEN":
+        control_color = "#43b36a"
+        control_icon = "wi wi-day-sunny"
+        control_text = "MỞ DÀN PHƠI"
 
-metric_card(
-    "Điều khiển servo",
-    control_text,
-    auto_reason,
-    control_icon,
-    control_color,
-    100
-)
+    else:
+        control_color = "#f5a623"
+        control_icon = "wi wi-na"
+        control_text = "GIỮ NGUYÊN"
+
+    metric_card(
+        "Điều khiển servo",
+        control_text,
+        auto_reason,
+        control_icon,
+        control_color,
+        100
+    )
 
     st.markdown('<div class="section-title">Biểu đồ cảm biến</div>', unsafe_allow_html=True)
 
