@@ -22,7 +22,7 @@ st.set_page_config(
 
 
 # =========================
-# DATA SOURCE FALLBACK
+# FALLBACK DATA SOURCE
 # =========================
 DATA_SOURCE = "data.csv"
 
@@ -30,15 +30,19 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - HIVEMQ CLOUD
 # =========================
-MQTT_BROKER = "70c5a54b752643dd817d84ea128f899d.s1.eu.hivemq.cloud"
+# Sửa 3 dòng này đúng với HiveMQ Cloud của bạn
+MQTT_BROKER = "NHAP_BROKER_HIVEMQ_CUA_BAN"
 MQTT_PORT = 8883
 
-MQTT_USERNAME = "ESP32-client"
-MQTT_PASSWORD = "Tan01052005!"
+MQTT_USERNAME = "NHAP_USERNAME_HIVEMQ"
+MQTT_PASSWORD = "NHAP_PASSWORD_HIVEMQ"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 
+# Topic ESP publish dữ liệu cảm biến
 MQTT_TOPIC_SENSOR_DATA = "smart_home/sensor/data"
+
+# Topic web gửi lệnh xuống ESP
 MQTT_TOPIC_CONTROL_RACK = "smart_home/control/rack"
 MQTT_TOPIC_CONTROL_DOOR = "smart_home/control/door"
 MQTT_TOPIC_CONTROL_MODE = "smart_home/control/mode"
@@ -184,14 +188,6 @@ section[data-testid="stSidebar"] {
     color: #2f3341;
     line-height: 1.3;
 }
-
-.mqtt-box {
-    background: #f3eee8;
-    border-radius: 18px;
-    padding: 12px 14px;
-    margin-bottom: 14px;
-    font-size: 13px;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -266,30 +262,15 @@ def status_card(title, state, desc, icon_class, color):
 # =========================
 # MQTT FUNCTIONS
 # =========================
-def get_mqtt_config():
-    return {
-        "broker": MQTT_BROKER,
-        "port": MQTT_PORT,
-        "username": MQTT_USERNAME,
-        "password": MQTT_PASSWORD,
-        "client_id": MQTT_CLIENT_ID,
-        "topic_sensor_data": MQTT_TOPIC_SENSOR_DATA,
-        "topic_control_rack": MQTT_TOPIC_CONTROL_RACK,
-        "topic_control_door": MQTT_TOPIC_CONTROL_DOOR,
-        "topic_control_mode": MQTT_TOPIC_CONTROL_MODE,
-        "tls": True,
-    }
-
-
-def create_mqtt_client(client_id_suffix):
-    cfg = get_mqtt_config()
+def create_mqtt_client(suffix):
+    client_id = f"{MQTT_CLIENT_ID}_{suffix}_{int(time.time() * 1000)}"
 
     client = mqtt.Client(
-        client_id=f"{cfg['client_id']}_{client_id_suffix}_{int(time.time())}",
+        client_id=client_id,
         protocol=mqtt.MQTTv311
     )
 
-    client.username_pw_set(cfg["username"], cfg["password"])
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
     client.tls_set(
         cert_reqs=ssl.CERT_REQUIRED,
@@ -299,26 +280,31 @@ def create_mqtt_client(client_id_suffix):
     return client
 
 
-def mqtt_get_latest_sensor_data(timeout_sec=2.5):
-    cfg = get_mqtt_config()
+def mqtt_get_latest_sensor_data(timeout_sec=4):
+    """
+    Subscribe topic smart_home/sensor/data trong vài giây để lấy payload mới nhất.
+    ESP nên publish retained để web nhận được ngay.
+    """
 
     result = {
         "payload": None,
         "error": None,
-        "connected": False
+        "connected": False,
+        "raw": None
     }
 
     try:
         def on_connect(client, userdata, flags, rc):
             if rc == 0:
                 result["connected"] = True
-                client.subscribe(cfg["topic_sensor_data"], qos=1)
+                client.subscribe(MQTT_TOPIC_SENSOR_DATA, qos=1)
             else:
                 result["error"] = f"MQTT connect failed, rc={rc}"
 
         def on_message(client, userdata, msg):
             try:
                 text = msg.payload.decode("utf-8")
+                result["raw"] = text
                 result["payload"] = json.loads(text)
             except Exception as e:
                 result["error"] = f"Parse payload error: {type(e).__name__}: {e}"
@@ -327,7 +313,7 @@ def mqtt_get_latest_sensor_data(timeout_sec=2.5):
         client.on_connect = on_connect
         client.on_message = on_message
 
-        client.connect(cfg["broker"], cfg["port"], keepalive=60)
+        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
         client.loop_start()
 
         start = time.time()
@@ -339,17 +325,23 @@ def mqtt_get_latest_sensor_data(timeout_sec=2.5):
         client.loop_stop()
         client.disconnect()
 
-        return result["payload"], result["error"]
+        return result["payload"], result["error"], result["raw"]
 
     except Exception as e:
-        return None, f"{type(e).__name__}: {e}"
+        return None, f"{type(e).__name__}: {e}", None
 
 
 def mqtt_publish_control(topic, message):
-    cfg = get_mqtt_config()
+    """
+    Publish text command xuống ESP.
+    ESP đang cần message text: OPEN / CLOSE / AUTO / MANUAL.
+    """
 
     try:
-        connected = {"ok": False, "rc": None}
+        connected = {
+            "ok": False,
+            "rc": None
+        }
 
         def on_connect(client, userdata, flags, rc):
             connected["rc"] = rc
@@ -358,7 +350,7 @@ def mqtt_publish_control(topic, message):
         client = create_mqtt_client("pub")
         client.on_connect = on_connect
 
-        client.connect(cfg["broker"], cfg["port"], keepalive=60)
+        client.connect(MQTT_BROKER, MQTT_PORT, keepalive=60)
         client.loop_start()
 
         start_time = time.time()
@@ -370,25 +362,25 @@ def mqtt_publish_control(topic, message):
             client.disconnect()
             return False, f"MQTT connect failed, rc={connected['rc']}"
 
-        msg_info = client.publish(
+        info = client.publish(
             topic,
             message,
             qos=1,
             retain=False
         )
 
-        msg_info.wait_for_publish(timeout=5)
+        info.wait_for_publish(timeout=5)
 
         client.loop_stop()
         client.disconnect()
 
-        if msg_info.rc == mqtt.MQTT_ERR_SUCCESS:
+        if info.rc == mqtt.MQTT_ERR_SUCCESS:
             return True, {
                 "topic": topic,
                 "message": message
             }
 
-        return False, f"Publish failed, rc={msg_info.rc}"
+        return False, f"Publish failed, rc={info.rc}"
 
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
@@ -432,7 +424,7 @@ def mqtt_payload_to_row(payload):
     light = float(payload.get("light_lux", payload.get("light", 0)))
     gas = float(payload.get("gas_raw", payload.get("gas", 0)))
 
-    rain_sensor = 1 if rain_state in ["RAIN", "RAINING", "YES", "1"] else 0
+    rain_sensor = 1 if rain_state in ["RAIN", "RAINING", "YES", "1", "TRUE"] else 0
 
     if rain_sensor == 1:
         weather_label = "Mưa"
@@ -464,7 +456,7 @@ def mqtt_payload_to_row(payload):
 
 
 # =========================
-# DEMO / FALLBACK DATA
+# FALLBACK DATA
 # =========================
 def make_demo_data():
     now = datetime.now().replace(minute=0, second=0, microsecond=0)
@@ -511,7 +503,7 @@ def make_demo_data():
 
 
 @st.cache_data(ttl=30)
-def load_data():
+def load_fallback_data():
     try:
         df = pd.read_csv(DATA_SOURCE)
     except Exception:
@@ -1085,12 +1077,12 @@ def render_big_temperature_chart(df):
 
 
 # =========================
-# LOAD DATA + MQTT DATA
+# LOAD MQTT DATA
 # =========================
-df = load_data()
+fallback_df = load_fallback_data()
 init_device_state()
 
-mqtt_payload, mqtt_error = mqtt_get_latest_sensor_data(timeout_sec=2.5)
+mqtt_payload, mqtt_error, mqtt_raw = mqtt_get_latest_sensor_data(timeout_sec=4)
 
 if mqtt_payload is not None:
     mqtt_row = mqtt_payload_to_row(mqtt_payload)
@@ -1100,13 +1092,16 @@ if mqtt_payload is not None:
         ignore_index=True
     ).tail(100)
 
-    df = pd.concat([df, st.session_state.live_df], ignore_index=True)
+    df = pd.concat([fallback_df, st.session_state.live_df], ignore_index=True)
     latest = pd.Series(mqtt_row)
     update_state_from_latest(latest)
+    data_source_name = "MQTT REALTIME"
 
 else:
+    df = fallback_df
     latest = df.iloc[-1]
     update_state_from_latest(latest)
+    data_source_name = "DATA.CSV FALLBACK"
 
 
 # =========================
@@ -1118,22 +1113,32 @@ st.sidebar.write("Nguồn dữ liệu:")
 if mqtt_payload is not None:
     st.sidebar.success("MQTT REALTIME")
 else:
-    st.sidebar.warning("FALLBACK DATA.CSV")
-
-if mqtt_payload is not None:
-    st.sidebar.write("Topic sensor:")
-    st.sidebar.code(MQTT_TOPIC_SENSOR_DATA)
-else:
-    st.sidebar.write("File:")
-    st.sidebar.code(DATA_SOURCE)
+    st.sidebar.warning("DATA.CSV FALLBACK")
     if mqtt_error:
-        st.sidebar.caption(f"MQTT: {mqtt_error}")
+        st.sidebar.error(mqtt_error)
+
+st.sidebar.write("Broker:")
+st.sidebar.code(MQTT_BROKER)
+
+st.sidebar.write("Topic sensor:")
+st.sidebar.code(MQTT_TOPIC_SENSOR_DATA)
 
 if st.sidebar.button("LÀM MỚI DỮ LIỆU", use_container_width=True):
     st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.write("Format MQTT cần có:")
+st.sidebar.subheader("DEBUG MQTT")
+
+if mqtt_payload is not None:
+    st.sidebar.success("Đã nhận payload từ ESP32")
+    with st.sidebar.expander("Payload mới nhất"):
+        st.json(mqtt_payload)
+else:
+    st.sidebar.warning("Chưa nhận được payload từ ESP32")
+    st.sidebar.caption("Kiểm tra ESP có publish retained lên smart_home/sensor/data chưa.")
+
+st.sidebar.markdown("---")
+st.sidebar.write("Format payload cần nhận:")
 st.sidebar.code("""
 {
   "temperature": 28.45,
@@ -1157,9 +1162,6 @@ st.sidebar.code("""
 # =========================
 st.sidebar.markdown("---")
 st.sidebar.subheader("📡 ĐIỀU KHIỂN MQTT")
-
-st.sidebar.write("Broker:")
-st.sidebar.code(MQTT_BROKER)
 
 st.sidebar.write("Rack topic:")
 st.sidebar.code(MQTT_TOPIC_CONTROL_RACK)
@@ -1267,9 +1269,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-source_text = "MQTT REALTIME" if mqtt_payload is not None else "DATA.CSV FALLBACK"
 st.markdown(
-    f'<div class="sub-title">Nguồn dữ liệu: {source_text} | Cập nhật: {latest["time"]}</div>',
+    f'<div class="sub-title">Nguồn dữ liệu: {data_source_name} | Cập nhật: {latest["time"]}</div>',
     unsafe_allow_html=True
 )
 
@@ -1289,7 +1290,7 @@ with right:
         metric_card(
             "Nhiệt độ",
             f'{float(latest["temperature"]):.1f}°C',
-            "Từ MQTT ESP32",
+            data_source_name,
             "wi wi-thermometer",
             "#f5a623",
             clamp(float(latest["temperature"]) / 45 * 100)
@@ -1299,7 +1300,7 @@ with right:
         metric_card(
             "Độ ẩm",
             f'{float(latest["humidity"]):.0f}%',
-            "Từ MQTT ESP32",
+            data_source_name,
             "wi wi-humidity",
             "#5b83ff",
             latest["humidity"]
