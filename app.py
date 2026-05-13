@@ -30,11 +30,11 @@ DATA_SOURCE = "data.csv"
 # =========================
 # MQTT CONFIG - FIX CỨNG HIVEMQ CLOUD
 # =========================
-MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491adf.s1.eu.hivemq.cloud"
+MQTT_BROKER = "0d3bcdfd1bb6411ead82b3fc9491a1df.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883
 
 MQTT_USERNAME = "anhtai"
-MQTT_PASSWORD = "NHAP_MAT_KHAU_HIVEMQ_CUA_BAN"
+MQTT_PASSWORD = "31102005Tai@"
 
 MQTT_CLIENT_ID = "streamlit_weather_dashboard"
 MQTT_TOPIC_DATA = "iot/clothesline/data"
@@ -51,12 +51,19 @@ SERVO_CLOSE_ANGLE = 0
 
 
 # =========================
-# SERVO CONFIG - CỬA
+# SERVO CONFIG - CỬA MG90S
 # =========================
 DOOR_SERVO_NAME = "MG90S"
 DOOR_COMMAND = "MSG40"
 DOOR_OPEN_ANGLE = 90
 DOOR_ACTION = "Mở cửa bằng servo MG90S"
+
+
+# =========================
+# GAS SENSOR CONFIG - MQ-5
+# =========================
+GAS_SENSOR_NAME = "MQ-5"
+GAS_SAFE_LIMIT = 300
 
 
 # =========================
@@ -279,15 +286,15 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         servo_name = SERVO_NAME
 
     elif command == "MSG40":
-        target_angle = 90
-        action_text = "Mở cửa bằng servo MG90S"
+        target_angle = DOOR_OPEN_ANGLE
+        action_text = DOOR_ACTION
         target_device = "door_servo"
-        servo_name = "MG90S"
+        servo_name = DOOR_SERVO_NAME
 
     else:
         return False, "Lệnh không hợp lệ"
 
-        payload = {
+    payload = {
         "device": cfg["device_id"],
         "target": target_device,
         "command": command,
@@ -298,6 +305,7 @@ def mqtt_publish(command, reason="Manual control from dashboard"):
         "reason": reason,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
+
     try:
         connected = {"ok": False, "rc": None}
 
@@ -390,6 +398,7 @@ def make_demo_data():
         pressure = 1006 + np.sin(i / 7) * 2
         light = max(0, 850 * np.sin((t.hour / 24) * np.pi))
         rain = 1 if hum > 88 and light < 250 else 0
+        gas = max(0, 120 + np.random.normal(0, 18))
 
         if rain == 1:
             label = "Mưa"
@@ -405,6 +414,7 @@ def make_demo_data():
             "pressure": round(pressure, 1),
             "light": round(light, 0),
             "rain_sensor": rain,
+            "gas": round(gas, 0),
             "weather_label": label,
             "ai_prediction": label,
         })
@@ -428,6 +438,7 @@ def load_data():
         "pressure",
         "light",
         "rain_sensor",
+        "gas",
         "weather_label",
         "ai_prediction",
     ]
@@ -438,6 +449,8 @@ def load_data():
                 df[col] = "Chưa dự đoán"
             elif col == "weather_label":
                 df[col] = "Không rõ"
+            elif col == "gas":
+                df[col] = 0
             else:
                 df[col] = 0
 
@@ -504,26 +517,15 @@ def main_iot_weather_card(df, latest):
 
     auto_cmd, auto_reason = auto_decide_command(latest)
 
-    if command == "OPEN":
-        target_angle = SERVO_OPEN_ANGLE
-        action_text = "Mở dàn phơi"
-        target_device = "clothesline_servo"
-        servo_name = SERVO_NAME
-
-    elif command == "CLOSE":
-        target_angle = SERVO_CLOSE_ANGLE
-        action_text = "Đóng / thu dàn phơi"
-        target_device = "clothesline_servo"
-        servo_name = SERVO_NAME
-
-    elif command == "MSG40":
-        target_angle = DOOR_OPEN_ANGLE
-        action_text = DOOR_ACTION
-        target_device = "door_servo"
-        servo_name = DOOR_SERVO_NAME
-
+    if auto_cmd == "CLOSE":
+        action = "ĐÓNG DÀN PHƠI"
+        action_color = "#e74c3c"
+    elif auto_cmd == "OPEN":
+        action = "MỞ DÀN PHƠI"
+        action_color = "#43b36a"
     else:
-        return False, "Lệnh không hợp lệ"
+        action = "GIỮ NGUYÊN"
+        action_color = "#f5a623"
 
     daily_boxes = ""
 
@@ -967,6 +969,7 @@ humidity
 pressure
 light
 rain_sensor
+gas
 weather_label
 ai_prediction
 """)
@@ -989,11 +992,14 @@ st.sidebar.code(str(mqtt_cfg["port"]))
 st.sidebar.write("Topic CMD:")
 st.sidebar.code(mqtt_cfg["topic_cmd"])
 
-st.sidebar.write("Servo:")
+st.sidebar.write("Servo dàn phơi:")
 st.sidebar.code(f"{SERVO_NAME} | OPEN={SERVO_OPEN_ANGLE}° | CLOSE={SERVO_CLOSE_ANGLE}°")
 
+st.sidebar.write("Servo cửa:")
+st.sidebar.code(f"{DOOR_SERVO_NAME} | MSG40={DOOR_OPEN_ANGLE}°")
+
 control_mode = st.sidebar.radio(
-    "Chế độ điều khiển",
+    "Chế độ điều khiển dàn phơi",
     ["Thủ công", "Tự động theo AI"]
 )
 
@@ -1025,9 +1031,20 @@ with col_close:
         else:
             st.sidebar.error(f"Không gửi được MQTT: {result}")
 
+if st.sidebar.button("MỞ CỬA MG90S", use_container_width=True):
+    ok, result = mqtt_publish(
+        "MSG40",
+        "Người dùng bấm mở cửa bằng servo MG90S"
+    )
+
+    if ok:
+        st.sidebar.success("Đã gửi MSG40 - mở cửa MG90S 90°")
+    else:
+        st.sidebar.error(f"Không gửi được MQTT: {result}")
+
 
 # =========================
-# AUTO CONTROL THEO AI
+# AUTO CONTROL THEO AI - CHỈ DÀN PHƠI
 # =========================
 if "last_auto_command" not in st.session_state:
     st.session_state.last_auto_command = None
@@ -1035,7 +1052,7 @@ if "last_auto_command" not in st.session_state:
 if control_mode == "Tự động theo AI":
     auto_cmd, auto_reason = auto_decide_command(latest)
 
-    st.sidebar.markdown("### AI ĐỀ XUẤT")
+    st.sidebar.markdown("### AI ĐỀ XUẤT DÀN PHƠI")
     st.sidebar.info(f"Lệnh: {auto_cmd}\n\nLý do: {auto_reason}")
 
     auto_send = st.sidebar.checkbox(
@@ -1152,6 +1169,31 @@ with right:
             80
         )
 
+    c7, c8 = st.columns(2)
+
+    with c7:
+        gas_value = float(latest["gas"])
+        gas_status = "AN TOÀN" if gas_value < GAS_SAFE_LIMIT else "CẢNH BÁO"
+
+        metric_card(
+            "Gas MQ-5",
+            f"{gas_value:.0f}",
+            f"{gas_status} | Ngưỡng {GAS_SAFE_LIMIT}",
+            "wi wi-smoke",
+            "#43b36a" if gas_value < GAS_SAFE_LIMIT else "#e74c3c",
+            clamp(gas_value / 1000 * 100)
+        )
+
+    with c8:
+        metric_card(
+            "Trạng thái gas",
+            gas_status,
+            GAS_SENSOR_NAME,
+            "wi wi-fire",
+            "#43b36a" if gas_value < GAS_SAFE_LIMIT else "#e74c3c",
+            100 if gas_value >= GAS_SAFE_LIMIT else 25
+        )
+
     auto_cmd, auto_reason = auto_decide_command(latest)
 
     if auto_cmd == "CLOSE":
@@ -1183,9 +1225,11 @@ with right:
     st.markdown(
         f"""
         <div class="control-note">
-            SERVO: <b>{SERVO_NAME}</b><br>
+            SERVO DÀN PHƠI: <b>{SERVO_NAME}</b><br>
             OPEN → {SERVO_OPEN_ANGLE}° &nbsp;&nbsp; | &nbsp;&nbsp;
-            CLOSE → {SERVO_CLOSE_ANGLE}°
+            CLOSE → {SERVO_CLOSE_ANGLE}°<br>
+            SERVO CỬA: <b>{DOOR_SERVO_NAME}</b> &nbsp;&nbsp; | &nbsp;&nbsp;
+            MSG40 → {DOOR_OPEN_ANGLE}°
         </div>
         """,
         unsafe_allow_html=True
@@ -1199,35 +1243,36 @@ with right:
                 "OPEN",
                 "Người dùng bấm mở dàn phơi 90 độ trên dashboard"
             )
-    
+
             if ok:
                 st.success("Đã gửi lệnh mở dàn phơi 90°")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
-    
+
     with btn2:
         if st.button("ĐÓNG DÀN PHƠI 0°", use_container_width=True, key="main_close"):
             ok, result = mqtt_publish(
                 "CLOSE",
                 "Người dùng bấm đóng dàn phơi về 0 độ trên dashboard"
             )
-    
+
             if ok:
                 st.success("Đã gửi lệnh đóng dàn phơi 0°")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
-    
+
     with btn3:
         if st.button("MỞ CỬA MG90S", use_container_width=True, key="main_msg40"):
             ok, result = mqtt_publish(
                 "MSG40",
                 "Người dùng bấm mở cửa bằng servo MG90S trên dashboard"
             )
-    
+
             if ok:
                 st.success("Đã gửi lệnh MSG40 - mở cửa MG90S 90°")
             else:
                 st.error(f"Không gửi được MQTT: {result}")
+
 
 # =========================
 # BIG CHART
